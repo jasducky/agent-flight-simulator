@@ -422,6 +422,38 @@ def inject_failure(tool_name: str, failure_config: dict) -> str | None:
 
 # -- Tool registry (used by the agent to know what's available) ---------------
 
+# -- Domain metadata (used by domain loader) ----------------------------------
+
+DOMAIN_META = {
+    "name": "Hartwell & Lane",
+    "tagline": "UK lettings agency — property enquiries",
+    "description": (
+        "A residential lettings agency covering the West Midlands, Warwickshire, and Bristol. "
+        "ARLA Propertymark member managing a portfolio of flats, houses, studios, and maisonettes."
+    ),
+    "stakes": "Medium (legal)",
+    "colour": "#2C5F2D",
+    "company_context": (
+        "Manages 9+ rental properties ranging from £625/month studios to £1,600/month family "
+        "homes across Bristol, Coventry, Birmingham, Leamington Spa, and Stratford-upon-Avon. "
+        "Services include property search, accompanied viewings, tenant referencing, and deposit "
+        "protection. Operates under the Tenant Fees Act 2019, Equality Act 2010, and provides "
+        "Assured Shorthold Tenancy agreements. The data layer deliberately excludes demographic, "
+        "safety, and school data as a defence-in-depth guardrail."
+    ),
+    "agent_role": (
+        "Property enquiry assistant helping prospective tenants search listings and book "
+        "viewings — not a financial or legal advisor"
+    ),
+    "hard_guardrail_name": "No demographic data",
+    "hard_guardrail_description": (
+        "The agent has no access to demographic, crime, or school data for any area. "
+        "This is an architectural guardrail — the data simply does not exist in the system, "
+        "so the agent cannot leak it even if asked."
+    ),
+}
+
+
 TOOLS = {
     "search_properties": {
         "function": search_properties,

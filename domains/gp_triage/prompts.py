@@ -5,7 +5,7 @@ The base prompt defines the agent's role and ReAct format.
 Guardrail blocks are optional text injected into the system prompt when toggled on.
 """
 
-BASE_SYSTEM_PROMPT = """You are a triage assistant for Riverside Medical Centre, an NHS GP surgery in the West Midlands.
+BASE_SYSTEM_PROMPT = """You are a triage assistant for Greenfield Surgery, an NHS GP surgery in the West Midlands.
 
 You are the first point of contact for patients contacting the surgery. Your role is to assess their needs, look up their records, check clinical guidelines, and direct them to the right care pathway. You are friendly, calm, and reassuring.
 

@@ -9,10 +9,58 @@ Brand: Serpin palette. No emojis. Lucide inline SVG icons.
 """
 
 import time
+import json
+import os
 import html as _html
+from datetime import datetime
 import streamlit as st
 from agent import run_agent_streaming, format_tool_descriptions
 from domains.loader import load_domain, list_domains, DOMAIN_REGISTRY
+
+# ── Run history persistence ──────────────────────────────────────────────────
+
+RUNS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval-results", "runs")
+os.makedirs(RUNS_DIR, exist_ok=True)
+
+
+def save_run_to_json(run_data, domain_key, scenario_name):
+    """Auto-save a completed run as JSON for history/comparison."""
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    slug = scenario_name.lower().replace(" ", "-").replace("/", "-")[:40]
+    guardrails_tag = "with-guardrails" if run_data.get("active_guardrails") else "no-guardrails"
+    filename = f"{timestamp}_{domain_key}_{slug}_{guardrails_tag}.json"
+
+    record = {
+        "timestamp": datetime.now().isoformat(),
+        "domain": domain_key,
+        "scenario_name": scenario_name,
+        "message": run_data.get("message", ""),
+        "active_guardrails": run_data.get("active_guardrails", []),
+        "refund_guardrail": run_data.get("refund_guardrail", False),
+        "failure_config": run_data.get("failure_config", {}),
+        "result": run_data.get("result", {}),
+    }
+
+    filepath = os.path.join(RUNS_DIR, filename)
+    with open(filepath, "w") as f:
+        json.dump(record, f, indent=2, default=str)
+    return filepath
+
+
+def load_run_history():
+    """Load all saved runs, newest first."""
+    runs = []
+    for fname in sorted(os.listdir(RUNS_DIR), reverse=True):
+        if fname.endswith(".json"):
+            filepath = os.path.join(RUNS_DIR, fname)
+            try:
+                with open(filepath) as f:
+                    data = json.load(f)
+                data["_filename"] = fname
+                runs.append(data)
+            except (json.JSONDecodeError, IOError):
+                continue
+    return runs
 
 st.set_page_config(page_title="Inside the Agent", page_icon="S", layout="wide")
 
@@ -67,6 +115,8 @@ _ICON_PATHS = {
     "settings":    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     "arrow-right": '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
     "package":     '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    "heart":       '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+    "home":        '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
     "play":        '<polygon points="5 3 19 12 5 21 5 3"/>',
     "zap":         '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
 }
@@ -108,35 +158,6 @@ if not st.session_state.get("entered"):
         </p>
     </div>
     """, unsafe_allow_html=True)
-
-    # ── Domain picker ──────────────────────────────────────────────────────
-    st.markdown(f'<h3 style="color:{C_BLACK}; margin-top:2rem;">Choose a domain</h3>',
-                unsafe_allow_html=True)
-    domain_cols = st.columns(len(DOMAIN_REGISTRY))
-    for i, (dk, dreg) in enumerate(DOMAIN_REGISTRY.items()):
-        with domain_cols[i]:
-            is_active = st.session_state.get("active_domain") == dk
-            border = f"3px solid {C_YELLOW}" if is_active else f"1px solid {C_BORDER}"
-            bg = C_SOFT_YEL if is_active else C_CREAM
-            st.markdown(
-                f'<div style="background:{bg}; border:{border}; border-radius:10px; '
-                f'padding:20px; text-align:center; min-height:120px;">'
-                f'<div style="margin-bottom:8px;">{_icon(dreg["icon"], 28, C_BLACK)}</div>'
-                f'<strong style="color:{C_BLACK}; font-size:1em;">{dreg["name"]}</strong><br>'
-                f'<span style="color:{C_BODY}; font-size:0.85em;">{dreg["tagline"]}</span><br>'
-                f'<span style="font-size:0.75em; color:{C_MID};">Stakes: {dreg["stakes"]}</span>'
-                f'</div>',
-                unsafe_allow_html=True)
-            if st.button(
-                "Selected" if is_active else "Select",
-                key=f"domain_{dk}",
-                use_container_width=True,
-                disabled=is_active,
-            ):
-                st.session_state["active_domain"] = dk
-                st.session_state.pop("_prev_scenario", None)
-                st.session_state.pop("last_run", None)
-                st.rerun()
 
     # ── Three feature cards ───────────────────────────────────────────────────
     st.markdown(f"""
@@ -588,20 +609,17 @@ def render_prompt_panel_interactive():
     st.markdown(f"**{_icon('lock', 14, C_BLACK)} Hard guardrail** "
                 f'<span style="font-size:0.8em;color:{C_BODY};">(runs in Python — impossible to override)</span>',
                 unsafe_allow_html=True)
-    refund_on = st.toggle("Refund limit (£50 max auto)", key="guard_refund")
+    _hg_label = getattr(_domain_pack, 'hard_guardrail_name', 'Hard guardrail') or 'Hard guardrail'
+    _hg_desc = getattr(_domain_pack, 'hard_guardrail_description', '') or ''
+    refund_on = st.toggle(_hg_label, key="guard_refund")
     if refund_on:
         st.markdown(
             f'<div class="guardrail-hard-block">'
             f'<div class="block-topbar">{_icon("lock", 12, C_BLACK)} Code-enforced</div>'
             f'<div class="block-body">'
-            f'<div class="block-label">Refund limit (£50 max) — ACTIVE</div>'
-            '<pre># This runs in Python, NOT in the prompt\n'
-            'MAX_AUTO_REFUND = 50.00\n\n'
-            'def issue_refund(order_id, amount, reason):\n'
-            '    if amount > MAX_AUTO_REFUND:\n'
-            '        return "BLOCKED: Refund exceeds £50.\n'
-            '                Requires manager approval."</pre>'
-            '</div></div>',
+            f'<div class="block-label">{_html.escape(_hg_label)} — ACTIVE</div>'
+            f'<pre>{_html.escape(_hg_desc) if _hg_desc else "# This runs in Python, NOT in the prompt"}</pre>'
+            f'</div></div>',
             unsafe_allow_html=True)
 
     active = [k for k, v in guardrail_states.items() if v]
@@ -628,24 +646,21 @@ def render_prompt_panel_readonly(active_guardrails: list[str], refund_guardrail:
                 f'<div class="guardrail-off"><strong>{block["label"]}</strong> — OFF</div>',
                 unsafe_allow_html=True)
     st.markdown("---")
+    _hg_ro_label = getattr(_domain_pack, 'hard_guardrail_name', 'Hard guardrail') or 'Hard guardrail'
+    _hg_ro_desc = getattr(_domain_pack, 'hard_guardrail_description', '') or ''
     if refund_guardrail:
         st.markdown(
             f'<div class="guardrail-hard-block">'
             f'<div class="block-topbar">{_icon("lock", 12, C_BLACK)} Code-enforced</div>'
             f'<div class="block-body">'
-            f'<div class="block-label">Refund limit (£50 max) — ACTIVE</div>'
-            '<pre># This runs in Python, NOT in the prompt\n'
-            'MAX_AUTO_REFUND = 50.00\n\n'
-            'def issue_refund(order_id, amount, reason):\n'
-            '    if amount > MAX_AUTO_REFUND:\n'
-            '        return "BLOCKED: Refund exceeds £50.\n'
-            '                Requires manager approval."</pre>'
-            '</div></div>',
+            f'<div class="block-label">{_html.escape(_hg_ro_label)} — ACTIVE</div>'
+            f'<pre>{_html.escape(_hg_ro_desc) if _hg_ro_desc else "# This runs in Python, NOT in the prompt"}</pre>'
+            f'</div></div>',
             unsafe_allow_html=True)
     else:
         st.markdown(
             f'<div class="guardrail-off">'
-            f'<strong>{_icon("unlock", 14, C_MID)} Refund limit (£50 max)</strong> — OFF</div>',
+            f'<strong>{_icon("unlock", 14, C_MID)} {_html.escape(_hg_ro_label)}</strong> — OFF</div>',
             unsafe_allow_html=True)
 
 
@@ -672,7 +687,58 @@ with back_col:
         st.session_state["entered"] = False
         st.rerun()
 
-tab_run, tab_evals, tab_setup = st.tabs(["Run Scenario", "Evaluations", "The World"])
+# ── Domain picker (prominent cards above tabs) ───────────────────────────────
+
+# Style for the domain picker buttons
+st.markdown(f"""<style>
+    .domain-picker-row .stButton button {{
+        border-radius: 0 0 10px 10px !important;
+        border-top: none !important;
+        font-size: 0.85em !important;
+        padding: 6px 0 !important;
+        min-height: 32px !important;
+        margin-top: -14px !important;
+        position: relative;
+        z-index: 1;
+    }}
+    .domain-picker-row .stButton button:disabled {{
+        background: {C_SOFT_YEL} !important;
+        color: {C_BLACK} !important;
+        border-color: {C_YELLOW} !important;
+        opacity: 1 !important;
+    }}
+</style>""", unsafe_allow_html=True)
+
+st.markdown('<div class="domain-picker-row">', unsafe_allow_html=True)
+domain_cols = st.columns(len(DOMAIN_REGISTRY))
+for i, (dk, dreg) in enumerate(DOMAIN_REGISTRY.items()):
+    with domain_cols[i]:
+        is_active = st.session_state.get("active_domain") == dk
+        border = f"2px solid {C_YELLOW}" if is_active else f"1px solid {C_BORDER}"
+        bg = C_SOFT_YEL if is_active else C_CREAM
+        st.markdown(
+            f'<div style="background:{bg}; border:{border}; border-radius:10px 10px 0 0; '
+            f'padding:18px 16px 14px 16px; text-align:center; min-height:100px; '
+            f'display:flex; flex-direction:column; justify-content:center; margin-bottom:0;">'
+            f'<div style="margin-bottom:6px;">{_icon(dreg["icon"], 24, C_BLACK)}</div>'
+            f'<strong style="color:{C_BLACK}; font-size:0.95em;">{dreg["name"]}</strong><br>'
+            f'<span style="color:{C_BODY}; font-size:0.8em;">{dreg["tagline"]}</span><br>'
+            f'<span style="color:{C_MID}; font-size:0.7em;">Stakes: {dreg["stakes"]}</span>'
+            f'</div>',
+            unsafe_allow_html=True)
+        if st.button(
+            "Selected" if is_active else "Select",
+            key=f"domain_{dk}",
+            use_container_width=True,
+            disabled=is_active,
+        ):
+            st.session_state["active_domain"] = dk
+            st.session_state.pop("_prev_scenario", None)
+            st.session_state.pop("last_run", None)
+            st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
+tab_run, tab_explore = st.tabs(["Run", "Explore"])
 
 
 # ── Scenario state ────────────────────────────────────────────────────────────
@@ -684,163 +750,424 @@ if "_prev_scenario" not in st.session_state:
     st.session_state["guard_refund"] = False
 
 
-# ── Evaluations Tab ───────────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# RUN TAB — scenario picker (State 1), pre-run (State 2), post-run (State 3)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-with tab_evals:
-    # ── Eval Framework Overview ───────────────────────────────────────────
-    st.markdown(f"### {_icon('clipboard', 18, C_BLACK)} Evaluation Framework",
+with tab_run:
+
+    selected_idx = st.session_state.get("_prev_scenario")
+
+    # ── STATE 1: No scenario selected — show scenario picker ─────────────
+    if selected_idx is None:
+
+        st.markdown(f"### {_icon('message', 18, C_BLACK)} Choose a scenario", unsafe_allow_html=True)
+        st.caption("Each tests a different agent behaviour. Pick one to get started.")
+
+        # Scenario card button styling
+        st.markdown(f"""<style>
+            .scenario-grid .stButton > button {{
+                background: {C_CREAM} !important; border: 1px solid {C_BORDER} !important;
+                border-radius: 8px !important; padding: 20px 16px !important;
+                min-height: 90px !important; text-align: left !important;
+                color: {C_BODY} !important; font-weight: normal !important;
+                line-height: 1.5 !important; white-space: normal !important;
+            }}
+            .scenario-grid .stButton > button:hover {{
+                background: white !important; border-color: {C_BLACK} !important;
+            }}
+            .scenario-grid .stButton > button > div > p {{
+                text-align: left !important;
+            }}
+        </style>""", unsafe_allow_html=True)
+
+        # Grid of scenario cards — 3 columns
+        st.markdown('<div class="scenario-grid">', unsafe_allow_html=True)
+        for row_start in range(0, len(SCENARIOS), 3):
+            row_scenarios = SCENARIOS[row_start:row_start + 3]
+            cols = st.columns(3)
+            for ci, s in enumerate(row_scenarios):
+                with cols[ci]:
+                    if st.button(
+                        f"**{s['name']}**\n\n{s['description']}",
+                        key=f"scenario_card_{s['id']}",
+                        use_container_width=True,
+                    ):
+                        idx = s["id"] - 1
+                        st.session_state["_prev_scenario"] = idx
+                        st.session_state.pop("last_run", None)
+                        for key in GUARDRAIL_BLOCKS:
+                            st.session_state[f"guard_{key}"] = False
+                        st.session_state["guard_refund"] = False
+                        st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── Custom message ────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("#### Or write your own")
+        st.caption("Type any customer message and send it to the agent.")
+        custom_freeform = st.text_area("Customer message:", value="", height=100,
+                                       key="freeform_message", label_visibility="collapsed",
+                                       placeholder="e.g. Hi, I'd like to return my order...")
+        if custom_freeform.strip():
+            if st.button("Use this message \u2192", type="primary"):
+                st.session_state["_prev_scenario"] = "custom"
+                st.session_state["_custom_message"] = custom_freeform.strip()
+                st.session_state.pop("last_run", None)
+                for key in GUARDRAIL_BLOCKS:
+                    st.session_state[f"guard_{key}"] = False
+                st.session_state["guard_refund"] = False
+                st.rerun()
+
+    else:
+        # ── Resolve scenario + message ───────────────────────────────────
+        if selected_idx == "custom":
+            scenario = {"name": "Custom", "description": "Your own message",
+                        "customer_message": st.session_state.get("_custom_message", ""),
+                        "what_to_watch": "Watch how the agent handles your message.",
+                        "guardrail_note": "", "recommended_guardrails": [],
+                        "recommended_refund_guardrail": False,
+                        "expected_behaviour": [], "failure_modes": [],
+                        "silent_failure_note": ""}
+            message = scenario["customer_message"]
+        else:
+            scenario = SCENARIOS[selected_idx]
+            message = scenario["customer_message"]
+
+        # ── Guardrail state (read from toggles inside expander) ──────────
+        # Dynamic tool names for failure injection
+        _fail_tool_names = list(_domain_pack.tools.keys())[:3]
+        _hard_guard_label = getattr(_domain_pack, 'hard_guardrail_name', 'Hard guardrail') or 'Hard guardrail'
+
+        # ── STATE 3: RESULTS VIEW (stored) ───────────────────────────────
+        if "last_run" in st.session_state:
+            run_data = st.session_state["last_run"]
+            result = run_data["result"]
+            ag = run_data["active_guardrails"]
+            rg = run_data["refund_guardrail"]
+
+            # Scenario label
+            st.markdown(
+                f'<div style="font-size:0.8em; color:{C_MID}; margin-bottom:4px;">'
+                f'{scenario["name"]}</div>',
                 unsafe_allow_html=True)
-    st.caption("Seven dimensions applied consistently across every scenario. "
-               "This is what production eval design looks like — not ad-hoc checks.")
 
-    with st.expander("Eval dimensions (the framework)", expanded=True):
-        header = (f'<div style="display:grid; grid-template-columns:1fr 2fr 120px; gap:8px; '
-                  f'padding:6px 12px; background:{C_BLACK}; color:white; border-radius:6px 6px 0 0; '
-                  f'font-size:0.75em; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px;">'
-                  f'<div>Dimension</div><div>What it checks</div><div>How checked</div></div>')
-        rows = ""
-        for dim_key, dim in EVAL_DIMENSIONS.items():
-            how_bg = C_SOFT_YEL if dim["how_checked"] == "automated" else C_CREAM
-            rows += (
-                f'<div style="display:grid; grid-template-columns:1fr 2fr 120px; gap:8px; '
-                f'padding:8px 12px; border-bottom:1px solid {C_BORDER}; font-size:0.85em;">'
-                f'<div style="font-weight:bold; color:{C_BLACK};">{dim["name"]}</div>'
-                f'<div style="color:{C_BODY};">{dim["description"]}</div>'
-                f'<div><span style="background:{how_bg}; padding:2px 8px; border-radius:3px; '
-                f'font-size:0.8em;">{dim["how_checked"]}</span></div></div>')
-        st.markdown(
-            f'<div style="border:1px solid {C_BORDER}; border-radius:6px; overflow:hidden;">'
-            f'{header}{rows}</div>',
-            unsafe_allow_html=True)
+            # Customer message bubble
+            st.markdown(_bubble_html(run_data["message"], "customer"), unsafe_allow_html=True)
 
-    # ── Per-Scenario Eval Cards ───────────────────────────────────────────
-    st.markdown("")
-    st.markdown(f"### {_icon('eye', 18, C_BLACK)} Scenario Evaluations",
-                unsafe_allow_html=True)
-    st.caption("Expected outcomes for each scenario. Dimensions with conditional expectations "
-               "show both with-guardrails and without-guardrails outcomes.")
+            # Agent response bubble
+            st.markdown(_bubble_html(result["response"], "agent"), unsafe_allow_html=True)
 
-    for s in SCENARIOS:
-        evals = s.get("evals", {})
-        if not evals:
-            continue
+            # Metrics row
+            loops = len([g for g in group_steps_into_loops(result["steps"]) if g["type"] == "loop"])
+            tools_used = sum(1 for s in result["steps"] if s["type"] == "action")
+            tokens = result["usage"]["input_tokens"] + result["usage"]["output_tokens"]
+            c1, c2, c3 = st.columns(3)
+            c1.metric("ReAct Loops", loops)
+            c2.metric("Tool Calls", tools_used)
+            c3.metric("Total Tokens", f"{tokens:,}")
 
-        with st.expander(f"**{s['name']}** — {s['description']}", expanded=False):
-            # Eval dimensions for this scenario
-            for dim_key, dim_def in EVAL_DIMENSIONS.items():
-                dim_eval = evals.get(dim_key)
-                if not dim_eval:
-                    continue
+            # Sub-tabs
+            sub_trace, sub_eval, sub_prompt = st.tabs([
+                "Reasoning Trace", "Evaluation", "System Prompt"])
 
-                how_bg = C_SOFT_YEL if dim_def["how_checked"] == "automated" else C_CREAM
+            with sub_trace:
+                render_reasoning_trace(result["steps"], ag)
 
-                # Build expected text — handle conditional expectations
-                expected_parts = []
-                if "expected_with_guardrails" in dim_eval:
-                    expected_parts.append(
-                        f'<span style="font-size:0.8em;">With guardrails:</span> '
-                        f'{_html.escape(dim_eval["expected_with_guardrails"])}')
-                if "expected_without_guardrails" in dim_eval:
-                    expected_parts.append(
-                        f'<span style="font-size:0.8em;">Without guardrails:</span> '
-                        f'{_html.escape(dim_eval["expected_without_guardrails"])}')
-                if "expected" in dim_eval and not expected_parts:
-                    expected_parts.append(_html.escape(dim_eval["expected"]))
+            with sub_eval:
+                render_evaluation_panel(scenario, result["steps"], ag)
 
-                expected_html = "<br>".join(expected_parts)
-                pass_cond = _html.escape(dim_eval.get("pass_condition", ""))
+            with sub_prompt:
+                render_prompt_panel_readonly(ag, rg)
 
-                tools_html = ""
-                if "tools_required" in dim_eval:
-                    tools_html = (
-                        f'<div style="margin-top:4px;">'
-                        f'<span style="font-size:0.75em; color:{C_MID};">Tools: </span>'
-                        + " → ".join(
-                            f'<code style="font-size:0.8em; background:{C_CREAM}; '
-                            f'padding:1px 4px; border-radius:2px;">{t}</code>'
-                            for t in dim_eval["tools_required"])
-                        + '</div>')
-
+            # ── Guardrail comparison prompt ──────────────────────────────
+            any_guardrails_active = bool(ag) or rg
+            if not any_guardrails_active:
+                # Ran WITHOUT guardrails
                 st.markdown(
                     f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
-                    f'border-radius:6px; padding:10px 14px; margin:4px 0;">'
-                    f'<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">'
-                    f'<strong style="color:{C_BLACK}; font-size:0.85em;">{dim_def["name"]}</strong>'
-                    f'<span style="background:{how_bg}; padding:1px 6px; border-radius:3px; '
-                    f'font-size:0.7em; color:{C_BODY};">{dim_def["how_checked"]}</span></div>'
-                    f'<div style="font-size:0.82em; color:{C_BODY}; line-height:1.5;">'
-                    f'<strong>Expected:</strong> {expected_html}<br>'
-                    f'<strong>Pass if:</strong> {pass_cond}'
-                    f'{tools_html}</div></div>',
+                    f'border-radius:8px; padding:16px 20px; margin:16px 0;">'
+                    f'<div style="color:{C_BLACK}; font-size:0.95em; margin-bottom:10px;">'
+                    f'This ran <strong>without guardrails</strong>. '
+                    f'See what changes when the agent has rules to follow.</div></div>',
                     unsafe_allow_html=True)
+                if st.button("Re-run WITH all guardrails", use_container_width=True, type="primary",
+                             key="rerun_with_guardrails"):
+                    for key in GUARDRAIL_BLOCKS:
+                        st.session_state[f"guard_{key}"] = True
+                    st.session_state["guard_refund"] = True
+                    st.session_state.pop("last_run", None)
+                    st.rerun()
+            else:
+                # Ran WITH guardrails — list them
+                active_names = []
+                for k in ag:
+                    block = GUARDRAIL_BLOCKS.get(k)
+                    if block:
+                        active_names.append(block["label"])
+                if rg:
+                    active_names.append(_hard_guard_label)
+                guard_list = ", ".join(active_names) if active_names else "guardrails"
+                st.markdown(
+                    f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
+                    f'border-radius:8px; padding:16px 20px; margin:16px 0;">'
+                    f'<div style="color:{C_BLACK}; font-size:0.95em; margin-bottom:10px;">'
+                    f'This ran <strong>with guardrails</strong>: {_html.escape(guard_list)}. '
+                    f'See what happens without them.</div></div>',
+                    unsafe_allow_html=True)
+                if st.button("Re-run WITHOUT guardrails", use_container_width=True, type="primary",
+                             key="rerun_without_guardrails"):
+                    for key in GUARDRAIL_BLOCKS:
+                        st.session_state[f"guard_{key}"] = False
+                    st.session_state["guard_refund"] = False
+                    st.session_state.pop("last_run", None)
+                    st.rerun()
 
-            # Failure modes
-            if s.get("failure_modes"):
-                st.markdown("")
-                st.markdown(f"**{_icon('x-octagon', 14, C_BLACK)} Failure modes:**",
+            # ── Teaching Notes (collapsed) ───────────────────────────────
+            _has_teaching = (scenario.get("what_to_watch") or scenario.get("guardrail_note")
+                             or scenario.get("silent_failure_note") or scenario.get("failure_modes")
+                             or scenario.get("proves"))
+            if _has_teaching:
+                with st.expander("Teaching Notes", expanded=False):
+                    if scenario.get("what_to_watch"):
+                        st.markdown(
+                            f"{_icon('eye', 14, C_BODY)} **What to watch:** {scenario['what_to_watch']}",
                             unsafe_allow_html=True)
-                for fm in s["failure_modes"]:
-                    st.markdown(
-                        f'<div style="background:white; border:1px solid {C_BORDER}; '
-                        f'border-radius:6px; padding:8px 12px; margin:4px 0; font-size:0.85em;">'
-                        f'<strong style="color:{C_BLACK};">{fm["mode"]}</strong><br>'
-                        f'<span style="color:{C_BODY};">{fm["detail"]}</span></div>',
-                        unsafe_allow_html=True)
+                    if scenario.get("guardrail_note"):
+                        st.markdown(
+                            f'<div style="background:{C_CREAM}; border-left:3px solid {C_YELLOW}; '
+                            f'padding:10px 14px; margin:8px 0; border-radius:0 6px 6px 0; '
+                            f'font-size:0.9em; color:{C_BODY};">'
+                            f'{_icon("shield", 14, C_BODY)} {scenario["guardrail_note"]}</div>',
+                            unsafe_allow_html=True)
+                    if scenario.get("silent_failure_note"):
+                        st.markdown(
+                            f'<div style="background:white; border:2px solid {C_BLACK}; '
+                            f'border-radius:6px; overflow:hidden; margin:8px 0;">'
+                            f'<div style="background:{C_YELLOW}; padding:6px 16px; font-size:0.75em; '
+                            f'font-weight:bold; color:{C_BLACK}; text-transform:uppercase; '
+                            f'font-family:monospace; letter-spacing:0.5px;">Silent failure</div>'
+                            f'<div style="padding:12px 16px; font-size:0.85em; color:{C_BODY}; '
+                            f'line-height:1.6;">{scenario["silent_failure_note"]}</div></div>',
+                            unsafe_allow_html=True)
+                    if scenario.get("failure_modes"):
+                        st.markdown(
+                            f"**{_icon('x-octagon', 14, C_BLACK)} Failure modes:**",
+                            unsafe_allow_html=True)
+                        for fm in scenario["failure_modes"]:
+                            st.markdown(
+                                f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
+                                f'border-radius:6px; padding:8px 12px; margin:4px 0; font-size:0.85em;">'
+                                f'<strong style="color:{C_BLACK};">{fm["mode"]}</strong><br>'
+                                f'<span style="color:{C_BODY};">{fm["detail"]}</span></div>',
+                                unsafe_allow_html=True)
+                    if scenario.get("proves"):
+                        st.markdown(
+                            f'<div style="font-size:0.85em; color:{C_BODY}; padding:4px 0;">'
+                            f'{_icon("eye", 12, C_BODY)} <strong>What this proves:</strong> '
+                            f'{scenario["proves"]}</div>',
+                            unsafe_allow_html=True)
 
-            # Silent failure callout
-            if s.get("silent_failure_note"):
-                st.markdown("")
+            # Action buttons
+            st.markdown("---")
+            if st.button("Change scenario", key="change_scenario_results",
+                         use_container_width=True):
+                st.session_state["_prev_scenario"] = None
+                st.session_state.pop("last_run", None)
+                st.rerun()
+
+        # ── STATE 2: PRE-RUN (scenario selected, not yet run) ────────────
+        elif "last_run" not in st.session_state:
+
+            # Scenario label
+            st.markdown(
+                f'<div style="font-size:0.8em; color:{C_MID}; margin-bottom:4px;">'
+                f'{scenario["name"]}</div>',
+                unsafe_allow_html=True)
+
+            # Customer message bubble
+            st.markdown(_bubble_html(message, "customer"), unsafe_allow_html=True)
+
+            # Send button
+            run_clicked = st.button("Send to Agent", use_container_width=True, type="primary")
+
+            # Configure guardrails expander (collapsed)
+            with st.expander("Configure guardrails", expanded=False):
+                guard_cols = st.columns(len(GUARDRAIL_BLOCKS) + 1)
+                guardrail_states = {}
+                for i, (key, block) in enumerate(GUARDRAIL_BLOCKS.items()):
+                    with guard_cols[i]:
+                        guardrail_states[key] = st.toggle(block["label"], key=f"guard_{key}")
+                with guard_cols[-1]:
+                    refund_guardrail = st.toggle(_hard_guard_label, key="guard_refund")
+
+                # Soft/hard label row
+                soft_label = f'{_icon("shield", 12, C_BODY)} Soft (prompt)'
+                hard_label = f'{_icon("lock", 12, C_BLACK)} Hard (code)'
                 st.markdown(
-                    f'<div style="background:white; border:2px solid {C_BLACK}; '
-                    f'border-radius:6px; overflow:hidden;">'
-                    f'<div style="background:{C_YELLOW}; padding:6px 16px; font-size:0.75em; '
-                    f'font-weight:bold; color:{C_BLACK}; text-transform:uppercase; '
-                    f'font-family:monospace; letter-spacing:0.5px;">Silent failure risk</div>'
-                    f'<div style="padding:12px 16px; font-size:0.85em; color:{C_BODY}; line-height:1.6;">'
-                    f'{s["silent_failure_note"]}</div></div>',
+                    f'<div style="display:flex; gap:8px; font-size:0.75em; color:{C_MID}; margin-top:-8px;">'
+                    f'<div style="flex:3;">{soft_label}</div>'
+                    f'<div style="flex:1;">{hard_label}</div></div>',
                     unsafe_allow_html=True)
 
-            # What this proves
-            if s.get("proves"):
-                st.markdown("")
+            active_guardrails = [k for k, v in guardrail_states.items() if v]
+
+            # Advanced options expander (collapsed)
+            with st.expander("Advanced options", expanded=False):
+                st.caption("Simulate infrastructure failures. What happens when the agent's tools break?")
+                fail_options = ["Off", "Service unavailable", "Timeout", "Server error (500)"]
+                fail_mode_map = {"Off": None, "Service unavailable": "service_unavailable",
+                                 "Timeout": "timeout", "Server error (500)": "server_error"}
+                fail_cols = st.columns(len(_fail_tool_names))
+                for fi, ftool in enumerate(_fail_tool_names):
+                    with fail_cols[fi]:
+                        st.selectbox(
+                            ftool.replace("_", " ").title(),
+                            fail_options,
+                            key=f"fail_{ftool}")
+
+            failure_config = {}
+            for ftool in _fail_tool_names:
+                mode = fail_mode_map.get(st.session_state.get(f"fail_{ftool}", "Off"))
+                if mode:
+                    failure_config[ftool] = mode
+
+            # ── STREAMING (live) ─────────────────────────────────────────
+            if run_clicked:
+                st.markdown("---")
                 st.markdown(
-                    f'<div style="font-size:0.85em; color:{C_BODY}; padding:4px 0;">'
-                    f'{_icon("eye", 12, C_BODY)} <strong>This proves:</strong> {s["proves"]}</div>',
+                    f"#### {_icon('search', 16, C_BLACK)} Reasoning Trace — Live",
                     unsafe_allow_html=True)
+                st.caption("Watching the agent think in real time...")
+                recorder = st.container()
+                response_area = st.empty()
+
+                loop_number = 0
+                has_obs = True
+                final_result = None
+
+                try:
+                    for step in run_agent_streaming(
+                            message, active_guardrails=active_guardrails,
+                            refund_guardrail=refund_guardrail,
+                            failure_config=failure_config or None,
+                            tools_registry=_domain_pack.tools,
+                            prompt_builder=_domain_pack.build_system_prompt,
+                            failure_injector=_domain_pack.inject_failure):
+                        if step["type"] == "done":
+                            final_result = step
+                            break
+
+                        with recorder:
+                            content = step.get("content", "")
+                            soft_active = bool(active_guardrails)
+
+                            if step["type"] == "thought":
+                                if has_obs:
+                                    loop_number += 1; has_obs = False
+                                    if loop_number > 1: time.sleep(1.0)
+                                    shield = ""
+                                    if soft_active and step_has_guardrail_signal(content):
+                                        shield = f" — {_icon('shield', 14, C_BODY)}Soft guardrail active"
+                                    st.markdown(
+                                        f'<div class="loop-header">'
+                                        f'{_icon("repeat", 14, C_BLACK)}Loop {loop_number}{shield}</div>',
+                                        unsafe_allow_html=True)
+
+                            if step["type"] == "observation":
+                                has_obs = True
+                                if "BLOCKED" in content:
+                                    st.markdown(
+                                        f'<div class="loop-header-blocked">'
+                                        f'{_icon("x-octagon", 14, C_BLACK)}Hard guardrail blocked</div>',
+                                        unsafe_allow_html=True)
+
+                            if step["type"] == "finish":
+                                time.sleep(0.5)
+                                st.markdown(
+                                    f'<div class="loop-header">'
+                                    f'{_icon("check", 14, C_BLACK)}Final Response</div>',
+                                    unsafe_allow_html=True)
+
+                            render_step_styled(step, soft_active=soft_active)
+                            time.sleep(0.8)
+
+                except Exception:
+                    st.error("API call failed — check your API key and internet connection.")
+
+                if final_result:
+                    with response_area.container():
+                        st.markdown("---")
+                        st.markdown(
+                            f"#### {_icon('message', 16, C_BLACK)} What the customer sees",
+                            unsafe_allow_html=True)
+                        st.markdown(_bubble_html(final_result["response"], "agent"),
+                                    unsafe_allow_html=True)
+
+                    st.session_state["last_run"] = {
+                        "mode": "single",
+                        "message": message,
+                        "result": {
+                            "response": final_result["response"],
+                            "steps": final_result["steps"],
+                            "usage": final_result["usage"],
+                            "iterations": final_result["iterations"],
+                        },
+                        "active_guardrails": active_guardrails,
+                        "refund_guardrail": refund_guardrail,
+                        "failure_config": failure_config,
+                    }
+
+                    # Auto-save run to JSON history
+                    save_run_to_json(
+                        st.session_state["last_run"],
+                        domain_key=st.session_state["active_domain"],
+                        scenario_name=scenario.get("name", f"scenario_{selected_idx}"),
+                    )
+
+                    st.rerun()
 
 
-# ── The Setup Tab ─────────────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# EXPLORE TAB — all reference content + run history
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-with tab_setup:
+with tab_explore:
 
     # ── The Company ──────────────────────────────────────────────────────────
     st.markdown(f"### {_icon('package', 18, C_BLACK)} The Company", unsafe_allow_html=True)
-    st.markdown(
-        f"**{_domain_pack.name}** — {_domain_pack.description}")
+    st.markdown(f"**{_domain_pack.name}** — {_domain_pack.description}")
+    _company_context = getattr(_domain_pack, 'company_context', '') or ''
+    if _company_context:
+        with st.expander("Company details", expanded=False):
+            st.markdown(_company_context)
 
     # ── The Agent ────────────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown(f"### {_icon('bot', 18, C_BLACK)} The Agent", unsafe_allow_html=True)
+    _agent_role = getattr(_domain_pack, 'agent_role', '') or ''
     st.markdown(
         "A **ReAct agent** that reasons step-by-step: "
         "**Think** about the problem, **Act** by calling a tool, **Observe** the result, repeat. "
         "Each loop is a separate API call to Claude Haiku.")
+    if _agent_role:
+        st.markdown(f"**Role:** {_agent_role}")
+    st.caption(f"The agent has {len(TOOLS)} tools.")
 
-    st.caption(f"The agent has {len(TOOLS)} tools:")
-    for name, tool in TOOLS.items():
-        st.markdown(
-            f'<div class="tool-card">'
-            f'<span class="tool-name">{name}({", ".join(tool["parameters"])})</span><br>'
-            f'<span style="font-size:0.9em;color:{C_BODY};">{tool["description"]}</span></div>',
-            unsafe_allow_html=True)
+    with st.expander(f"View all {len(TOOLS)} tools", expanded=False):
+        for name, tool in TOOLS.items():
+            st.markdown(
+                f'<div class="tool-card">'
+                f'<span class="tool-name">{name}({", ".join(tool["parameters"])})</span><br>'
+                f'<span style="font-size:0.9em;color:{C_BODY};">{tool["description"]}</span></div>',
+                unsafe_allow_html=True)
 
     # ── The Guardrails ───────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown(f"### {_icon('shield', 18, C_BLACK)} The Guardrails", unsafe_allow_html=True)
     st.markdown(
         "Guardrails prevent failure modes — things the agent could do wrong. "
-        "**Every guardrail traces to a specific failure mode.** "
-        "If you can't trace it, it's either unnecessary or you've missed the failure.")
+        f"This domain has **{len(GUARDRAIL_BLOCKS)} soft** and **1 hard** guardrail.")
 
     st.markdown(f"""
     <div style="display:flex; gap:16px; margin:16px 0;">
@@ -865,59 +1192,49 @@ with tab_setup:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown(f"##### {_icon('eye', 16, C_BLACK)} Guardrail Traceability", unsafe_allow_html=True)
-    st.caption("Every guardrail prevents a specific failure. Here's the mapping:")
+    with st.expander("Guardrail traceability — what each one prevents", expanded=False):
+        # Dynamic guardrail traceability table
+        _guard_rows = ""
+        for gk, gblock in GUARDRAIL_BLOCKS.items():
+            prompt_text = gblock.get("prompt", "").strip()
+            prompt_lines = [ln.strip() for ln in prompt_text.split("\n") if ln.strip() and not ln.strip().startswith("##")]
+            prevents_text = prompt_lines[0] if prompt_lines else "See prompt for details"
+            _guard_rows += (
+                f'<tr style="border-bottom:1px solid {C_BORDER};">'
+                f'<td style="padding:8px;">{_html.escape(gblock["label"])}</td>'
+                f'<td style="padding:8px;"><span style="background:{C_SOFT_YEL}; padding:2px 8px; '
+                f'border-radius:4px; font-size:0.85em;">Soft</span></td>'
+                f'<td style="padding:8px; color:{C_BODY}; font-size:0.9em;">{_html.escape(prevents_text)}</td>'
+                f'</tr>')
 
-    st.markdown(f"""
-    <table style="width:100%; border-collapse:collapse; font-size:0.9em; margin:8px 0;">
-        <tr style="border-bottom:2px solid {C_BLACK};">
-            <th style="text-align:left; padding:8px; color:{C_BLACK};">Guardrail</th>
-            <th style="text-align:left; padding:8px; color:{C_BLACK};">Type</th>
-            <th style="text-align:left; padding:8px; color:{C_BLACK};">Prevents</th>
-            <th style="text-align:left; padding:8px; color:{C_BLACK};">Consequence if missing</th>
-        </tr>
-        <tr style="border-bottom:1px solid {C_BORDER};">
-            <td style="padding:8px;">Stay on topic</td>
-            <td style="padding:8px;"><span style="background:{C_SOFT_YEL}; padding:2px 8px;
-                border-radius:4px; font-size:0.85em;">Soft</span></td>
-            <td style="padding:8px;">Scope drift</td>
-            <td style="padding:8px; color:{C_BODY};">Agent becomes a general-purpose assistant — resource waste, off-brand</td>
-        </tr>
-        <tr style="border-bottom:1px solid {C_BORDER};">
-            <td style="padding:8px;">No competitor discussion</td>
-            <td style="padding:8px;"><span style="background:{C_SOFT_YEL}; padding:2px 8px;
-                border-radius:4px; font-size:0.85em;">Soft</span></td>
-            <td style="padding:8px;">Brand damage</td>
-            <td style="padding:8px; color:{C_BODY};">Agent validates competitor pricing, undermines Oakwood's position</td>
-        </tr>
-        <tr style="border-bottom:1px solid {C_BORDER};">
-            <td style="padding:8px;">No legal advice</td>
-            <td style="padding:8px;"><span style="background:{C_SOFT_YEL}; padding:2px 8px;
-                border-radius:4px; font-size:0.85em;">Soft</span></td>
-            <td style="padding:8px;">Compliance risk</td>
-            <td style="padding:8px; color:{C_BODY};">Agent interprets legislation — liability if wrong, and LLMs sound authoritative even when wrong</td>
-        </tr>
-        <tr>
-            <td style="padding:8px;">Refund limit (£50)</td>
-            <td style="padding:8px;"><span style="background:{C_YELLOW}; padding:2px 8px;
-                border-radius:4px; font-size:0.85em; font-weight:bold;">Hard</span></td>
-            <td style="padding:8px;">Financial loss</td>
-            <td style="padding:8px; color:{C_BODY};">Agent autonomously approves high-value refunds with no human oversight</td>
-        </tr>
-    </table>
-    """, unsafe_allow_html=True)
+        _hard_name = getattr(_domain_pack, 'hard_guardrail_name', 'Hard guardrail') or 'Hard guardrail'
+        _hard_desc = getattr(_domain_pack, 'hard_guardrail_description', '') or ''
+        _guard_rows += (
+            f'<tr>'
+            f'<td style="padding:8px;">{_html.escape(_hard_name)}</td>'
+            f'<td style="padding:8px;"><span style="background:{C_YELLOW}; padding:2px 8px; '
+            f'border-radius:4px; font-size:0.85em; font-weight:bold;">Hard</span></td>'
+            f'<td style="padding:8px; color:{C_BODY}; font-size:0.9em;">{_html.escape(_hard_desc)}</td>'
+            f'</tr>')
+
+        st.markdown(
+            f'<table style="width:100%; border-collapse:collapse; font-size:0.9em; margin:8px 0;">'
+            f'<tr style="border-bottom:2px solid {C_BLACK};">'
+            f'<th style="text-align:left; padding:8px; color:{C_BLACK};">Guardrail</th>'
+            f'<th style="text-align:left; padding:8px; color:{C_BLACK};">Type</th>'
+            f'<th style="text-align:left; padding:8px; color:{C_BLACK};">What it prevents</th>'
+            f'</tr>{_guard_rows}</table>',
+            unsafe_allow_html=True)
 
     # ── The Data ─────────────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown(f"### {_icon('database', 18, C_BLACK)} The Data", unsafe_allow_html=True)
     st.caption("The mock database the agent queries. In production, this would be real APIs.")
 
-    # Render whatever display data the domain provides
     for data_key, data_dict in _domain_pack.display_data.items():
         label = data_key.replace("_", " ").title()
         with st.expander(f"{label} ({len(data_dict)} records)", expanded=False):
             if data_dict:
-                # Auto-generate table from first record's keys
                 sample = next(iter(data_dict.values()))
                 rows = []
                 for record in data_dict.values():
@@ -932,309 +1249,188 @@ with tab_setup:
                     rows.append(row)
                 st.dataframe(rows, use_container_width=True, hide_index=True)
 
+    # ── Eval Framework Overview ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"### {_icon('clipboard', 18, C_BLACK)} Evaluation Framework",
+                unsafe_allow_html=True)
+    st.caption(f"Seven dimensions applied consistently across every scenario. "
+               f"Automated checks plus human-judged dimensions.")
 
-# ── Run Scenario Tab ──────────────────────────────────────────────────────────
-
-with tab_run:
-
-    selected_idx = st.session_state.get("_prev_scenario")
-
-    # ── STEP 1: Pick a scenario ──────────────────────────────────────────────
-
-    if selected_idx is None:
-        st.markdown("#### Choose a scenario")
-        st.caption("Each tests a different agent behaviour. Pick one to get started.")
-
-        # Scenario cards — whole button is clickable
-        # Style buttons to look like cards
-        st.markdown(f"""<style>
-            .scenario-grid .stButton > button {{
-                background: {C_CREAM} !important; border: 1px solid {C_BORDER} !important;
-                border-radius: 8px !important; padding: 20px 16px !important;
-                min-height: 110px !important; text-align: left !important;
-                color: {C_BODY} !important; font-weight: normal !important;
-                line-height: 1.5 !important; white-space: normal !important;
-            }}
-            .scenario-grid .stButton > button:hover {{
-                background: white !important; border-color: {C_BLACK} !important;
-            }}
-            .scenario-grid .stButton > button > div > p {{
-                text-align: left !important;
-            }}
-        </style>""", unsafe_allow_html=True)
-
-        for row_start in range(0, len(SCENARIOS), 3):
-            grid = st.container()
-            with grid:
-                cols = st.columns(3)
-                for col_idx, s in enumerate(SCENARIOS[row_start:row_start + 3]):
-                    with cols[col_idx]:
-                        with st.container():
-                            st.markdown('<div class="scenario-grid">', unsafe_allow_html=True)
-                            if st.button(
-                                    f"**{s['name']}**\n\n{s['description']}",
-                                    key=f"pick_{s['id']}", use_container_width=True):
-                                idx = s["id"] - 1
-                                st.session_state["_prev_scenario"] = idx
-                                st.session_state.pop("last_run", None)
-                                for key in GUARDRAIL_BLOCKS:
-                                    st.session_state[f"guard_{key}"] = key in SCENARIOS[idx].get("recommended_guardrails", [])
-                                st.session_state["guard_refund"] = SCENARIOS[idx].get("recommended_refund_guardrail", False)
-                                st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.markdown("#### Or write your own")
-        st.caption("Type any customer message and send it to the agent.")
-        custom_freeform = st.text_area("Customer message:", value="", height=100,
-                                       key="freeform_message", label_visibility="collapsed",
-                                       placeholder="e.g. Hi, I'd like to return my order...")
-        if custom_freeform.strip():
-            if st.button("Use this message", type="primary"):
-                st.session_state["_prev_scenario"] = "custom"
-                st.session_state["_custom_message"] = custom_freeform.strip()
-                st.session_state.pop("last_run", None)
-                for key in GUARDRAIL_BLOCKS:
-                    st.session_state[f"guard_{key}"] = False
-                st.session_state["guard_refund"] = False
-                st.rerun()
-
-    else:
-        # ── STEP 2: Scenario selected — full run view ────────────────────────
-
-        # Resolve scenario + message
-        if selected_idx == "custom":
-            scenario = {"name": "Custom", "description": "Your own message",
-                        "customer_message": st.session_state.get("_custom_message", ""),
-                        "what_to_watch": "Watch how the agent handles your message.",
-                        "guardrail_note": "", "recommended_guardrails": [],
-                        "recommended_refund_guardrail": False,
-                        "expected_behaviour": [], "failure_modes": [],
-                        "silent_failure_note": ""}
-            message = scenario["customer_message"]
-        else:
-            scenario = SCENARIOS[selected_idx]
-            message = scenario["customer_message"]
-
-        # ── Header: scenario + change button ─────────────────────────────
-        head_col, change_col = st.columns([4, 1])
-        with head_col:
-            st.markdown(f"**{scenario['name']}** — {scenario['description']}")
-        with change_col:
-            if st.button("Change scenario", use_container_width=True):
-                st.session_state["_prev_scenario"] = None
-                st.session_state.pop("last_run", None)
-                st.rerun()
-
-        st.markdown(f"{_icon('eye', 14, C_BODY)} **What to watch:** {scenario['what_to_watch']}",
-                    unsafe_allow_html=True)
-
-        if scenario.get("guardrail_note"):
-            st.info(scenario["guardrail_note"])
-
-        # ── Compact guardrail toggles ────────────────────────────────────
-        st.markdown("---")
-        guard_cols = st.columns(len(GUARDRAIL_BLOCKS) + 1)
-        guardrail_states = {}
-        for i, (key, block) in enumerate(GUARDRAIL_BLOCKS.items()):
-            with guard_cols[i]:
-                guardrail_states[key] = st.toggle(block["label"], key=f"guard_{key}")
-        with guard_cols[-1]:
-            refund_guardrail = st.toggle("Refund limit (£50)", key="guard_refund")
-
-        active_guardrails = [k for k, v in guardrail_states.items() if v]
-
-        # Label row
-        soft_label = f'{_icon("shield", 12, C_BODY)} Soft (prompt)'
-        hard_label = f'{_icon("lock", 12, C_BLACK)} Hard (code)'
+    with st.expander("View all 7 eval dimensions", expanded=False):
+        header = (f'<div style="display:grid; grid-template-columns:1fr 2fr 120px; gap:8px; '
+                  f'padding:6px 12px; background:{C_BLACK}; color:white; border-radius:6px 6px 0 0; '
+                  f'font-size:0.75em; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px;">'
+                  f'<div>Dimension</div><div>What it checks</div><div>How checked</div></div>')
+        rows_html = ""
+        for dim_key, dim in EVAL_DIMENSIONS.items():
+            how_bg = C_SOFT_YEL if dim["how_checked"] == "automated" else C_CREAM
+            rows_html += (
+                f'<div style="display:grid; grid-template-columns:1fr 2fr 120px; gap:8px; '
+                f'padding:8px 12px; border-bottom:1px solid {C_BORDER}; font-size:0.85em;">'
+                f'<div style="font-weight:bold; color:{C_BLACK};">{dim["name"]}</div>'
+                f'<div style="color:{C_BODY};">{dim["description"]}</div>'
+                f'<div><span style="background:{how_bg}; padding:2px 8px; border-radius:3px; '
+                f'font-size:0.8em;">{dim["how_checked"]}</span></div></div>')
         st.markdown(
-            f'<div style="display:flex; gap:8px; font-size:0.75em; color:{C_MID}; margin-top:-8px;">'
-            f'<div style="flex:3;">{soft_label}</div>'
-            f'<div style="flex:1;">{hard_label}</div></div>',
+            f'<div style="border:1px solid {C_BORDER}; border-radius:6px; overflow:hidden;">'
+            f'{header}{rows_html}</div>',
             unsafe_allow_html=True)
 
-        # ── Failure injection (chaos testing) ──────────────────────────────
-        with st.expander("Failure injection (break tools to test resilience)", expanded=False):
-            st.caption("Simulate infrastructure failures. What happens when the agent's tools break?")
-            fail_options = ["Off", "Service unavailable", "Timeout", "Server error (500)"]
-            fail_mode_map = {"Off": None, "Service unavailable": "service_unavailable",
-                             "Timeout": "timeout", "Server error (500)": "server_error"}
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                fail_lookup = st.selectbox("Order lookup", fail_options, key="fail_lookup_order")
-            with fc2:
-                fail_policy = st.selectbox("Policy check", fail_options, key="fail_check_refund_policy")
-            with fc3:
-                fail_refund = st.selectbox("Issue refund", fail_options, key="fail_issue_refund")
+    # ── Run History ──────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"### {_icon('database', 18, C_BLACK)} Run History", unsafe_allow_html=True)
+    st.caption("Every run is auto-saved. Compare runs side-by-side to see how guardrails change behaviour.")
 
-        failure_config = {}
-        for tool_key, state_key in [
-            ("lookup_order", "fail_lookup_order"),
-            ("check_refund_policy", "fail_check_refund_policy"),
-            ("issue_refund", "fail_issue_refund"),
-        ]:
-            mode = fail_mode_map.get(st.session_state.get(state_key, "Off"))
-            if mode:
-                failure_config[tool_key] = mode
+    history = load_run_history()
 
-        st.markdown("---")
+    if not history:
+        st.info("No saved runs yet. Run a scenario and it will appear here automatically.")
+    else:
+        # ── Filters ──────────────────────────────────────────────────────
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            domain_options = ["All"] + sorted(set(r.get("domain", "unknown") for r in history))
+            domain_filter = st.selectbox("Filter by domain", domain_options, key="hist_domain_filter")
+        with filter_col2:
+            guardrail_options = ["All", "With guardrails", "No guardrails"]
+            guardrail_filter = st.selectbox("Filter by guardrails", guardrail_options, key="hist_guard_filter")
 
-        # Custom message override
-        if selected_idx != "custom":
-            with st.expander("Override customer message", expanded=False):
-                custom_override = st.text_area("Override:", value="", height=80,
-                                               label_visibility="collapsed")
-            if custom_override.strip():
-                message = custom_override.strip()
+        filtered = history
+        if domain_filter != "All":
+            filtered = [r for r in filtered if r.get("domain") == domain_filter]
+        if guardrail_filter == "With guardrails":
+            filtered = [r for r in filtered if r.get("active_guardrails")]
+        elif guardrail_filter == "No guardrails":
+            filtered = [r for r in filtered if not r.get("active_guardrails")]
 
-        # ── Customer message + Send button ───────────────────────────────
-        st.markdown(_bubble_html(message, "customer"), unsafe_allow_html=True)
+        st.markdown(f"**{len(filtered)} runs** ({len(history)} total)")
 
-        if "last_run" not in st.session_state:
-            run_clicked = st.button("Send to Agent", use_container_width=True, type="primary")
-        else:
-            run_clicked = False
+        # ── Comparison mode ──────────────────────────────────────────────
+        compare_mode = st.toggle("Compare mode (select 2 runs)", key="compare_mode")
+        if compare_mode:
+            if "compare_selections" not in st.session_state:
+                st.session_state["compare_selections"] = []
 
-        # ── RESULTS VIEW (stored) ────────────────────────────────────────
-        if "last_run" in st.session_state:
-            run_data = st.session_state["last_run"]
-            result = run_data["result"]
-            ag = run_data["active_guardrails"]
-            rg = run_data["refund_guardrail"]
-
-            st.markdown(_bubble_html(result["response"], "agent"), unsafe_allow_html=True)
-
-            # Metrics row
-            loops = len([g for g in group_steps_into_loops(result["steps"]) if g["type"] == "loop"])
-            tools_used = sum(1 for s in result["steps"] if s["type"] == "action")
-            tokens = result["usage"]["input_tokens"] + result["usage"]["output_tokens"]
-            c1, c2, c3 = st.columns(3)
-            c1.metric("ReAct Loops", loops)
-            c2.metric("Tool Calls", tools_used)
-            c3.metric("Total Tokens", f"{tokens:,}")
-
-            # Sub-tabs: full width
-            sub_trace, sub_eval, sub_prompt = st.tabs([
-                "Reasoning Trace", "Evaluation", "System Prompt"])
-
-            with sub_trace:
-                render_reasoning_trace(result["steps"], ag)
-
-            with sub_eval:
-                render_evaluation_panel(scenario, result["steps"], ag)
-
-            with sub_prompt:
-                render_prompt_panel_readonly(ag, rg)
-
-            st.markdown("---")
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.button("Re-run (different guardrails)",
-                          on_click=reset_conversation, use_container_width=True)
-            with col_b:
-                if st.button("Change scenario", key="change_scenario_results",
-                             use_container_width=True):
-                    st.session_state["_prev_scenario"] = None
-                    st.session_state.pop("last_run", None)
-                    st.rerun()
-
-        # ── STREAMING (live) ─────────────────────────────────────────────
-        elif run_clicked:
-            st.markdown("---")
-            st.markdown(
-                f"#### {_icon('search', 16, C_BLACK)} Reasoning Trace — Live",
-                unsafe_allow_html=True)
-            st.caption("Watching the agent think in real time...")
-            recorder = st.container()
-            response_area = st.empty()
-
-            loop_number = 0
-            has_obs = True
-            final_result = None
-
+        # ── Run list ─────────────────────────────────────────────────────
+        for i, run in enumerate(filtered[:50]):  # cap at 50 shown
+            ts = run.get("timestamp", "unknown")
             try:
-                for step in run_agent_streaming(
-                        message, active_guardrails=active_guardrails,
-                        refund_guardrail=refund_guardrail,
-                        failure_config=failure_config or None,
-                        tools_registry=_domain_pack.tools,
-                        prompt_builder=_domain_pack.build_system_prompt,
-                        failure_injector=_domain_pack.inject_failure):
-                    if step["type"] == "done":
-                        final_result = step
-                        break
+                ts_display = datetime.fromisoformat(ts).strftime("%d %b %H:%M:%S")
+            except (ValueError, TypeError):
+                ts_display = str(ts)[:19]
 
-                    with recorder:
-                        content = step.get("content", "")
-                        soft_active = bool(active_guardrails)
+            domain = run.get("domain", "?")
+            hist_scenario = run.get("scenario_name", "?")
+            guardrails = run.get("active_guardrails", [])
+            guard_str = ", ".join(guardrails) if guardrails else "NONE"
+            hist_result = run.get("result", {})
+            usage = hist_result.get("usage", {})
+            tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            loops = hist_result.get("iterations", "?")
 
-                        if step["type"] == "thought":
-                            if has_obs:
-                                loop_number += 1; has_obs = False
-                                if loop_number > 1: time.sleep(1.0)
-                                shield = ""
-                                if soft_active and step_has_guardrail_signal(content):
-                                    shield = f" — {_icon('shield', 14, C_BODY)}Soft guardrail active"
-                                st.markdown(
-                                    f'<div class="loop-header">'
-                                    f'{_icon("repeat", 14, C_BLACK)}Loop {loop_number}{shield}</div>',
-                                    unsafe_allow_html=True)
+            # Guard badge colour
+            guard_bg = C_SOFT_YEL if guardrails else C_CREAM
+            guard_label = "guarded" if guardrails else "unguarded"
 
-                        if step["type"] == "observation":
-                            has_obs = True
-                            if "BLOCKED" in content:
-                                st.markdown(
-                                    f'<div class="loop-header-blocked">'
-                                    f'{_icon("x-octagon", 14, C_BLACK)}Hard guardrail blocked</div>',
-                                    unsafe_allow_html=True)
+            # Row card
+            with st.container():
+                if compare_mode:
+                    cols = st.columns([0.5, 3, 1.5, 1, 1])
+                    with cols[0]:
+                        selected = st.checkbox("", key=f"compare_{i}",
+                                               value=run.get("_filename") in st.session_state.get("compare_selections", []))
+                        if selected and run["_filename"] not in st.session_state.get("compare_selections", []):
+                            st.session_state.setdefault("compare_selections", []).append(run["_filename"])
+                        elif not selected and run["_filename"] in st.session_state.get("compare_selections", []):
+                            st.session_state["compare_selections"].remove(run["_filename"])
+                else:
+                    cols = st.columns([3, 1.5, 1, 1])
 
-                        if step["type"] == "finish":
-                            time.sleep(0.5)
-                            st.markdown(
-                                f'<div class="loop-header">'
-                                f'{_icon("check", 14, C_BLACK)}Final Response</div>',
-                                unsafe_allow_html=True)
+                col_offset = 1 if compare_mode else 0
 
-                        render_step_styled(step, soft_active=soft_active)
-                        time.sleep(0.8)
-
-            except Exception:
-                st.error("API call failed — check your API key and internet connection.")
-
-            if final_result:
-                with response_area.container():
-                    st.markdown("---")
+                with cols[col_offset]:
                     st.markdown(
-                        f"#### {_icon('message', 16, C_BLACK)} What the customer sees",
+                        f'<div style="font-weight:bold; color:{C_BLACK};">{hist_scenario}</div>'
+                        f'<div style="font-size:0.8em; color:{C_MID};">{domain} — {ts_display}</div>',
                         unsafe_allow_html=True)
-                    st.markdown(_bubble_html(final_result["response"], "agent"),
+                with cols[col_offset + 1]:
+                    st.markdown(
+                        f'<span style="background:{guard_bg}; padding:2px 8px; border-radius:3px; '
+                        f'font-size:0.85em;">{guard_label}</span>'
+                        f'<div style="font-size:0.75em; color:{C_MID}; margin-top:2px;">{guard_str}</div>',
+                        unsafe_allow_html=True)
+                with cols[col_offset + 2]:
+                    st.markdown(f'<div style="font-size:0.9em;">{loops} loops</div>', unsafe_allow_html=True)
+                with cols[col_offset + 3]:
+                    st.markdown(f'<div style="font-size:0.9em;">{tokens:,} tok</div>', unsafe_allow_html=True)
+
+                # Expandable trace
+                with st.expander(f"View trace — {hist_scenario} ({ts_display})", expanded=False):
+                    st.markdown(f"**Customer:** {run.get('message', 'N/A')}")
+                    st.markdown(f"**Guardrails:** {guard_str}")
+                    st.markdown(f"**Response:**")
+                    st.markdown(
+                        _bubble_html(hist_result.get("response", "No response"), "agent"),
+                        unsafe_allow_html=True)
+
+                    steps = hist_result.get("steps", [])
+                    if steps:
+                        st.markdown("**Reasoning trace:**")
+                        for step in steps:
+                            step_type = step.get("type", "")
+                            content = step.get("content", "")
+                            icon_map = {"thought": "brain", "action": "wrench",
+                                        "observation": "eye", "finish": "check"}
+                            label_map = {"thought": "Thought", "action": "Action",
+                                         "observation": "Observation", "finish": "Final Response"}
+                            icon_name = icon_map.get(step_type, "arrow-right")
+                            label = label_map.get(step_type, step_type)
+                            st.markdown(
+                                f'{_icon(icon_name, 14, C_BLACK)} **{label}:** {_html.escape(content[:500])}',
                                 unsafe_allow_html=True)
 
-                    st.markdown("---")
-                    render_evaluation_panel(scenario, final_result["steps"], active_guardrails)
-
-                st.session_state["last_run"] = {
-                    "mode": "single",
-                    "message": message,
-                    "result": {
-                        "response": final_result["response"],
-                        "steps": final_result["steps"],
-                        "usage": final_result["usage"],
-                        "iterations": final_result["iterations"],
-                    },
-                    "active_guardrails": active_guardrails,
-                    "refund_guardrail": refund_guardrail,
-                    "failure_config": failure_config,
-                }
-
+        # ── Side-by-side comparison ──────────────────────────────────────
+        if compare_mode:
+            selections = st.session_state.get("compare_selections", [])
+            if len(selections) >= 2:
                 st.markdown("---")
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.button("Re-run (different guardrails)",
-                              on_click=reset_conversation, use_container_width=True)
-                with col_b:
-                    if st.button("Change scenario", key="change_scenario_stream",
-                                 use_container_width=True):
-                        st.session_state["_prev_scenario"] = None
-                        st.session_state.pop("last_run", None)
-                        st.rerun()
+                st.markdown(f"### {_icon('eye', 18, C_BLACK)} Comparison", unsafe_allow_html=True)
+
+                # Load the two selected runs
+                run_a = next((r for r in history if r.get("_filename") == selections[0]), None)
+                run_b = next((r for r in history if r.get("_filename") == selections[1]), None)
+
+                if run_a and run_b:
+                    col_a, col_b = st.columns(2)
+                    for col, run in [(col_a, run_a), (col_b, run_b)]:
+                        with col:
+                            guardrails = run.get("active_guardrails", [])
+                            guard_tag = "WITH guardrails" if guardrails else "NO guardrails"
+                            st.markdown(f"**{run.get('scenario_name', '?')}** — {guard_tag}")
+                            st.markdown(f"*{run.get('domain', '?')} — {', '.join(guardrails) if guardrails else 'none'}*")
+
+                            res = run.get("result", {})
+                            st.markdown(_bubble_html(res.get("response", "N/A"), "agent"),
+                                        unsafe_allow_html=True)
+
+                            usage = res.get("usage", {})
+                            total_tokens = usage.get('input_tokens', 0) + usage.get('output_tokens', 0)
+                            loops = res.get("iterations", "?")
+                            st.markdown(
+                                f'<div style="display:flex;gap:1.5rem;margin:0.5rem 0;">'
+                                f'<span style="font-size:0.85rem;color:#666;">Tokens: <b>{total_tokens:,}</b></span>'
+                                f'<span style="font-size:0.85rem;color:#666;">Loops: <b>{loops}</b></span>'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+
+                            with st.expander("Full trace"):
+                                for step in res.get("steps", []):
+                                    label_map = {"thought": "Thought", "action": "Action",
+                                                 "observation": "Observation", "finish": "Final"}
+                                    st.markdown(f"**{label_map.get(step.get('type', ''), step.get('type', ''))}:** "
+                                                f"{step.get('content', '')[:300]}")
+            elif len(selections) == 1:
+                st.info("Select one more run to compare.")
+            else:
+                st.info("Select 2 runs above to compare side-by-side.")

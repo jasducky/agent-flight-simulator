@@ -41,6 +41,12 @@ class DomainPack:
     scenarios: list
     eval_dimensions: dict
 
+    # Company context (optional, for "The World" tab)
+    company_context: str = ""
+    agent_role: str = ""
+    hard_guardrail_name: str = ""
+    hard_guardrail_description: str = ""
+
     # Domain-specific display data (optional, for "The World" tab)
     display_data: dict = field(default_factory=dict)
 
@@ -109,6 +115,10 @@ def load_domain(domain_key: str) -> DomainPack:
         description=meta.get("description", ""),
         stakes=meta.get("stakes", reg["stakes"]),
         colour=meta.get("colour", "#535353"),
+        company_context=meta.get("company_context", ""),
+        agent_role=meta.get("agent_role", ""),
+        hard_guardrail_name=meta.get("hard_guardrail_name", ""),
+        hard_guardrail_description=meta.get("hard_guardrail_description", ""),
         tools=data_mod.TOOLS,
         faq_entries=data_mod.FAQ_ENTRIES,
         failure_modes=data_mod.FAILURE_MODES,

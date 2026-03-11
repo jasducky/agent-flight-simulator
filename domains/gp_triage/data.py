@@ -432,6 +432,36 @@ def inject_failure(tool_name: str, failure_config: dict) -> str | None:
 
 # ── Tool registry (used by the agent to know what's available) ─────────────────
 
+# ── Domain metadata (used by domain loader) ──────────────────────────────────
+
+DOMAIN_META = {
+    "name": "Greenfield Surgery",
+    "tagline": "NHS GP surgery — patient triage",
+    "description": (
+        "An NHS GP surgery in the West Midlands with two GPs (Dr Amara Osei and "
+        "Dr Rajesh Patel). Provides standard primary care services to registered patients."
+    ),
+    "stakes": "High (health)",
+    "colour": "#4A90D9",
+    "company_context": (
+        "NHS GP surgery offering routine and urgent appointments, telephone consultations, "
+        "repeat prescriptions, vaccinations, and blood tests. Free at point of care. "
+        "Appointments via phone (Mon-Fri 8am-6:30pm) or in person. Same-day urgent slots "
+        "released at 8am. Out-of-hours: NHS 111 for urgent issues, 999 for emergencies."
+    ),
+    "agent_role": (
+        "Patient triage assistant that helps patients book appointments and provides "
+        "general practice information — not a medical professional"
+    ),
+    "hard_guardrail_name": "Emergency auto-escalation",
+    "hard_guardrail_description": (
+        "When emergency keywords are detected (chest pain, breathing difficulty, self-harm), "
+        "the agent immediately escalates to emergency services. This is a code-level "
+        "guardrail the agent cannot override."
+    ),
+}
+
+
 TOOLS = {
     "lookup_patient": {
         "function": lookup_patient,
