@@ -75,6 +75,13 @@ DOMAIN_REGISTRY = {
         "icon": "home",
         "stakes": "Medium (legal)",
     },
+    "insurance_claims": {
+        "module": "domains.insurance_claims",
+        "name": "Apex Motor Insurance",
+        "tagline": "UK motor insurer — claims FNOL",
+        "icon": "shield",
+        "stakes": "High (financial/regulatory)",
+    },
 }
 
 
@@ -105,7 +112,9 @@ def load_domain(domain_key: str) -> DomainPack:
     # Build display data from whatever the domain exposes
     display_data = {}
     for attr in ["ORDERS", "PATIENTS", "PROPERTIES",
-                 "REFUND_POLICIES", "CLINICAL_GUIDELINES", "TENANT_CRITERIA"]:
+                 "REFUND_POLICIES", "CLINICAL_GUIDELINES", "TENANT_CRITERIA",
+                 "CLAIMS", "POLICIES", "SETTLEMENT_GUIDELINES",
+                 "FRAUD_INDICATORS", "VULNERABILITY_INDICATORS"]:
         if hasattr(data_mod, attr):
             display_data[attr] = getattr(data_mod, attr)
 

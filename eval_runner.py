@@ -140,7 +140,7 @@ def run_single(run_config, domain_packs):
         result = run_agent(
             customer_message=scenario["customer_message"],
             active_guardrails=run_config["guardrails"] or None,
-            refund_guardrail=run_config["hard_guardrail"],
+            hard_guardrail=run_config["hard_guardrail"],
             tools_registry=pack.tools,
             prompt_builder=pack.build_system_prompt,
             failure_injector=pack.inject_failure,
