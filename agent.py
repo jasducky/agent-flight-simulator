@@ -16,6 +16,7 @@ and failure injection as parameters. Defaults to Oakwood (backward compat).
 
 import re
 import os
+import inspect
 import anthropic
 from dotenv import load_dotenv
 
@@ -44,17 +45,20 @@ def parse_action(text: str) -> tuple[str, dict] | None:
     """
     Parse an Action line like: Action: tool_name(param1="value1", param2="value2")
     Returns (tool_name, {param1: value1, ...}) or None if no action found.
+
+    Handles multi-line quoted values (e.g. email bodies with newlines).
     """
-    match = re.search(r'Action:\s*(\w+)\((.+?)\)', text, re.MULTILINE)
+    # Match tool name after Action:, then capture everything up to the last )
+    match = re.search(r'Action:\s*(\w+)\((.+)\)', text, re.DOTALL)
     if not match:
         return None
 
     tool_name = match.group(1)
     params_str = match.group(2)
 
-    # Parse key="value" pairs
+    # Parse key="value" pairs — allow newlines and escaped quotes inside values
     params = {}
-    for param_match in re.finditer(r'(\w+)\s*=\s*"([^"]*)"', params_str):
+    for param_match in re.finditer(r'(\w+)\s*=\s*"((?:[^"\\]|\\.)*)"', params_str, re.DOTALL):
         params[param_match.group(1)] = param_match.group(2)
 
     # Also handle numeric values: amount=18.99
@@ -98,8 +102,10 @@ def call_tool(
 
     func = tool["function"]
 
-    # Inject guardrails_enabled for issue_refund
-    if tool_name == "issue_refund":
+    # Inject guardrails_enabled for any tool that accepts it
+    # (e.g. Oakwood's issue_refund, GP's book_appointment)
+    sig = inspect.signature(func)
+    if "guardrails_enabled" in sig.parameters:
         params["guardrails_enabled"] = guardrails_enabled
 
     try:
@@ -111,7 +117,7 @@ def call_tool(
 def run_agent(
     customer_message: str,
     active_guardrails: list[str] | None = None,
-    refund_guardrail: bool = True,
+    hard_guardrail: bool = True,
     failure_config: dict | None = None,
     tools_registry: dict | None = None,
     prompt_builder=None,
@@ -123,7 +129,7 @@ def run_agent(
     Args:
         customer_message: The customer's message.
         active_guardrails: List of soft guardrail keys to activate in the prompt.
-        refund_guardrail: Whether the hard £50 refund limit is active.
+        hard_guardrail: Whether the domain's hard guardrail is active (e.g. £50 refund cap, emergency escalation).
         failure_config: Dict mapping tool names to failure modes for chaos testing.
         tools_registry: Domain-specific tools dict (defaults to Oakwood).
         prompt_builder: Domain-specific build_system_prompt function.
@@ -188,7 +194,7 @@ def run_agent(
             tool_name, params = action
             steps.append({"type": "action", "content": f"{tool_name}({params})"})
 
-            observation = call_tool(tool_name, params, guardrails_enabled=refund_guardrail, failure_config=failure_config, tools_registry=tools_registry, failure_injector=failure_injector)
+            observation = call_tool(tool_name, params, guardrails_enabled=hard_guardrail, failure_config=failure_config, tools_registry=tools_registry, failure_injector=failure_injector)
             steps.append({"type": "observation", "content": observation})
 
             # Add assistant response and observation to conversation
@@ -222,7 +228,7 @@ def run_agent(
 def run_agent_streaming(
     customer_message: str,
     active_guardrails: list[str] | None = None,
-    refund_guardrail: bool = True,
+    hard_guardrail: bool = True,
     failure_config: dict | None = None,
     tools_registry: dict | None = None,
     prompt_builder=None,
@@ -306,7 +312,7 @@ def run_agent_streaming(
             steps.append(step)
             yield step
 
-            observation = call_tool(tool_name, params, guardrails_enabled=refund_guardrail, failure_config=failure_config, tools_registry=tools_registry, failure_injector=failure_injector)
+            observation = call_tool(tool_name, params, guardrails_enabled=hard_guardrail, failure_config=failure_config, tools_registry=tools_registry, failure_injector=failure_injector)
             step = {"type": "observation", "content": observation}
             steps.append(step)
             yield step

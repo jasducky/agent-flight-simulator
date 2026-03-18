@@ -36,7 +36,7 @@ def save_run_to_json(run_data, domain_key, scenario_name):
         "scenario_name": scenario_name,
         "message": run_data.get("message", ""),
         "active_guardrails": run_data.get("active_guardrails", []),
-        "refund_guardrail": run_data.get("refund_guardrail", False),
+        "hard_guardrail": run_data.get("hard_guardrail", False),
         "failure_config": run_data.get("failure_config", {}),
         "result": run_data.get("result", {}),
     }
@@ -137,16 +137,20 @@ def _icon(name: str, size: int = 16, color: str = "#535353") -> str:
 
 if not st.session_state.get("entered"):
 
-    # Hide sidebar on landing page
+    # Hide sidebar and dev menu on landing page
     st.markdown("""<style>
         [data-testid="stSidebar"] { display: none; }
         [data-testid="stSidebarCollapsedControl"] { display: none; }
+        #MainMenu { visibility: hidden; }
+        footer { visibility: hidden; }
+        [data-testid="stToolbar"] { display: none; }
+        header[data-testid="stHeader"] { display: none; }
     </style>""", unsafe_allow_html=True)
 
     # ── Hero ──────────────────────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="background:{C_BLACK}; padding:60px 40px 50px 40px; border-radius:16px;
-                margin:-1rem -1rem 2rem -1rem; text-align:center;">
+    <div style="background:{C_BLACK}; padding:40px 40px 32px 40px; border-radius:16px;
+                margin:-1rem -1rem 1.2rem -1rem; text-align:center;">
         <h1 style="color:{C_YELLOW}; font-size:2.8em; margin-bottom:8px; letter-spacing:-1px;">
             Inside the Agent
         </h1>
@@ -161,35 +165,32 @@ if not st.session_state.get("entered"):
 
     # ── Three feature cards ───────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="display:flex; gap:20px; margin:2rem 0;">
+    <div style="display:flex; gap:16px; margin:0 0 1.2rem 0;">
         <div style="flex:1; background:{C_CREAM}; border:1px solid {C_BORDER}; border-radius:12px;
-                    padding:24px;">
-            <div style="margin-bottom:12px;">{_icon("brain", 28, C_BLACK)}</div>
-            <h4 style="color:{C_BLACK}; margin:0 0 8px 0;">See the reasoning</h4>
-            <p style="color:{C_BODY}; font-size:0.9em; line-height:1.6; margin:0;">
-                Most AI shows you the answer. This shows you the thinking.
-                Watch the agent reason through each step of a customer query —
+                    padding:18px;">
+            <div style="margin-bottom:8px;">{_icon("brain", 24, C_BLACK)}</div>
+            <h4 style="color:{C_BLACK}; margin:0 0 6px 0; font-size:0.95em;">See the reasoning</h4>
+            <p style="color:{C_BODY}; font-size:0.85em; line-height:1.5; margin:0;">
+                Watch the agent reason through each step —
                 Thought, Action, Observation, Response.
             </p>
         </div>
         <div style="flex:1; background:{C_CREAM}; border:1px solid {C_BORDER}; border-radius:12px;
-                    padding:24px;">
-            <div style="margin-bottom:12px;">{_icon("shield", 28, C_BLACK)}</div>
-            <h4 style="color:{C_BLACK}; margin:0 0 8px 0;">Toggle guardrails</h4>
-            <p style="color:{C_BODY}; font-size:0.9em; line-height:1.6; margin:0;">
-                Switch between soft guardrails (prompt instructions the model can ignore)
-                and hard guardrails (code that can't be bypassed).
+                    padding:18px;">
+            <div style="margin-bottom:8px;">{_icon("shield", 24, C_BLACK)}</div>
+            <h4 style="color:{C_BLACK}; margin:0 0 6px 0; font-size:0.95em;">Toggle guardrails</h4>
+            <p style="color:{C_BODY}; font-size:0.85em; line-height:1.5; margin:0;">
+                Soft guardrails (prompt) vs hard guardrails (code).
                 See how each changes the agent's behaviour.
             </p>
         </div>
         <div style="flex:1; background:{C_CREAM}; border:1px solid {C_BORDER}; border-radius:12px;
-                    padding:24px;">
-            <div style="margin-bottom:12px;">{_icon("clipboard", 28, C_BLACK)}</div>
-            <h4 style="color:{C_BLACK}; margin:0 0 8px 0;">Inspect the prompt</h4>
-            <p style="color:{C_BODY}; font-size:0.9em; line-height:1.6; margin:0;">
-                See the exact system prompt the agent receives.
-                Watch guardrail blocks appear and disappear in real time
-                as you toggle them on and off.
+                    padding:18px;">
+            <div style="margin-bottom:8px;">{_icon("clipboard", 24, C_BLACK)}</div>
+            <h4 style="color:{C_BLACK}; margin:0 0 6px 0; font-size:0.95em;">Inspect the prompt</h4>
+            <p style="color:{C_BODY}; font-size:0.85em; line-height:1.5; margin:0;">
+                See the exact system prompt the agent receives
+                as you toggle guardrails on and off.
             </p>
         </div>
     </div>
@@ -197,40 +198,40 @@ if not st.session_state.get("entered"):
 
     # ── How it works ──────────────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="margin:2.5rem 0 1.5rem 0;">
-        <h3 style="color:{C_BLACK};">How it works</h3>
+    <div style="margin:0 0 0.8rem 0;">
+        <h3 style="color:{C_BLACK}; margin:0 0 0.5rem 0;">How it works</h3>
     </div>
-    <div style="display:flex; gap:16px; margin-bottom:2rem;">
-        <div style="flex:1; text-align:center; padding:16px;">
-            <div style="background:{C_YELLOW}; width:36px; height:36px; border-radius:50%;
+    <div style="display:flex; gap:12px; margin-bottom:1rem;">
+        <div style="flex:1; text-align:center; padding:10px;">
+            <div style="background:{C_YELLOW}; width:32px; height:32px; border-radius:50%;
                         display:inline-flex; align-items:center; justify-content:center;
-                        font-weight:bold; color:{C_BLACK}; font-size:1.1em;">1</div>
-            <p style="color:{C_BODY}; font-size:0.9em; margin-top:10px;">
-                <strong>Understand the setup</strong><br>See the agent's tools, data, and guardrails
+                        font-weight:bold; color:{C_BLACK}; font-size:1em;">1</div>
+            <p style="color:{C_BODY}; font-size:0.85em; margin-top:6px;">
+                <strong>Pick a domain</strong><br>See the agent's tools and data
             </p>
         </div>
-        <div style="flex:1; text-align:center; padding:16px;">
-            <div style="background:{C_YELLOW}; width:36px; height:36px; border-radius:50%;
+        <div style="flex:1; text-align:center; padding:10px;">
+            <div style="background:{C_YELLOW}; width:32px; height:32px; border-radius:50%;
                         display:inline-flex; align-items:center; justify-content:center;
-                        font-weight:bold; color:{C_BLACK}; font-size:1.1em;">2</div>
-            <p style="color:{C_BODY}; font-size:0.9em; margin-top:10px;">
-                <strong>Pick a scenario</strong><br>Choose a customer situation to test
+                        font-weight:bold; color:{C_BLACK}; font-size:1em;">2</div>
+            <p style="color:{C_BODY}; font-size:0.85em; margin-top:6px;">
+                <strong>Choose a scenario</strong><br>Pick a customer situation to test
             </p>
         </div>
-        <div style="flex:1; text-align:center; padding:16px;">
-            <div style="background:{C_YELLOW}; width:36px; height:36px; border-radius:50%;
+        <div style="flex:1; text-align:center; padding:10px;">
+            <div style="background:{C_YELLOW}; width:32px; height:32px; border-radius:50%;
                         display:inline-flex; align-items:center; justify-content:center;
-                        font-weight:bold; color:{C_BLACK}; font-size:1.1em;">3</div>
-            <p style="color:{C_BODY}; font-size:0.9em; margin-top:10px;">
-                <strong>Run and observe</strong><br>Watch the reasoning trace, toggle guardrails
+                        font-weight:bold; color:{C_BLACK}; font-size:1em;">3</div>
+            <p style="color:{C_BODY}; font-size:0.85em; margin-top:6px;">
+                <strong>Run & observe</strong><br>Watch the reasoning trace
             </p>
         </div>
-        <div style="flex:1; text-align:center; padding:16px;">
-            <div style="background:{C_YELLOW}; width:36px; height:36px; border-radius:50%;
+        <div style="flex:1; text-align:center; padding:10px;">
+            <div style="background:{C_YELLOW}; width:32px; height:32px; border-radius:50%;
                         display:inline-flex; align-items:center; justify-content:center;
-                        font-weight:bold; color:{C_BLACK}; font-size:1.1em;">4</div>
-            <p style="color:{C_BODY}; font-size:0.9em; margin-top:10px;">
-                <strong>Evaluate</strong><br>Check expected vs actual behaviour — spot the silent failures
+                        font-weight:bold; color:{C_BLACK}; font-size:1em;">4</div>
+            <p style="color:{C_BODY}; font-size:0.85em; margin-top:6px;">
+                <strong>Evaluate</strong><br>Spot the silent failures
             </p>
         </div>
     </div>
@@ -582,7 +583,7 @@ def render_evaluation_panel(scenario: dict, steps: list[dict], active_guardrails
 
 
 def render_prompt_panel_interactive():
-    """Prompt panel with inline guardrail toggles. Returns (active_guardrails, refund_guardrail)."""
+    """Prompt panel with inline guardrail toggles. Returns (active_guardrails, hard_guardrail)."""
     st.markdown(f"##### {_icon('clipboard', 16, C_BLACK)} System Prompt", unsafe_allow_html=True)
     st.caption("Toggle guardrails to see the prompt change.")
     tool_desc = format_tool_descriptions(TOOLS)
@@ -626,7 +627,7 @@ def render_prompt_panel_interactive():
     return active, refund_on
 
 
-def render_prompt_panel_readonly(active_guardrails: list[str], refund_guardrail: bool):
+def render_prompt_panel_readonly(active_guardrails: list[str], hard_guardrail: bool):
     """Read-only prompt panel for results view (no toggles)."""
     st.markdown(f"##### {_icon('clipboard', 16, C_BLACK)} System Prompt (as sent)", unsafe_allow_html=True)
     tool_desc = format_tool_descriptions(TOOLS)
@@ -648,7 +649,7 @@ def render_prompt_panel_readonly(active_guardrails: list[str], refund_guardrail:
     st.markdown("---")
     _hg_ro_label = getattr(_domain_pack, 'hard_guardrail_name', 'Hard guardrail') or 'Hard guardrail'
     _hg_ro_desc = getattr(_domain_pack, 'hard_guardrail_description', '') or ''
-    if refund_guardrail:
+    if hard_guardrail:
         st.markdown(
             f'<div class="guardrail-hard-block">'
             f'<div class="block-topbar">{_icon("lock", 12, C_BLACK)} Code-enforced</div>'
@@ -673,6 +674,11 @@ def reset_conversation():
 st.markdown("""<style>
     [data-testid="stSidebar"] { display: none; }
     [data-testid="stSidebarCollapsedControl"] { display: none; }
+    [data-testid="stAppViewBlockContainer"] { padding-top: 1rem !important; }
+    header[data-testid="stHeader"] { background: transparent; }
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    [data-testid="stToolbar"] { display: none; }
 </style>""", unsafe_allow_html=True)
 
 
@@ -680,7 +686,14 @@ st.markdown("""<style>
 
 title_col, back_col = st.columns([5, 1])
 with title_col:
-    st.markdown(f"## {_icon('search', 22, C_BLACK)} Inside the Agent", unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="display:flex; align-items:center; gap:10px;">'
+        f'<div style="background:{C_BLACK}; color:{C_YELLOW}; width:36px; height:36px; '
+        f'border-radius:8px; display:flex; align-items:center; justify-content:center; '
+        f'font-weight:bold; font-size:1.1em; flex-shrink:0;">iA</div>'
+        f'<span style="font-size:1.4em; font-weight:700; color:{C_BLACK}; letter-spacing:-0.5px;">'
+        f'Inside the Agent</span></div>',
+        unsafe_allow_html=True)
 with back_col:
     st.markdown("")  # spacing
     if st.button("Back to start", use_container_width=True):
@@ -688,6 +701,9 @@ with back_col:
         st.rerun()
 
 # ── Domain picker (prominent cards above tabs) ───────────────────────────────
+
+st.markdown(f"#### {_icon('package', 18, C_BLACK)} Choose a business domain", unsafe_allow_html=True)
+st.caption("Each domain has different stakes, guardrails, and ways things can go wrong.")
 
 # Style for the domain picker buttons
 st.markdown(f"""<style>
@@ -781,52 +797,72 @@ with tab_run:
             }}
         </style>""", unsafe_allow_html=True)
 
-        # Grid of scenario cards — 3 columns
+        # Grid of scenario cards + "Write your own" — 3 columns
+        _all_cards = list(SCENARIOS) + [{"id": "custom", "name": "Write your own", "description": "Type a custom message"}]
         st.markdown('<div class="scenario-grid">', unsafe_allow_html=True)
-        for row_start in range(0, len(SCENARIOS), 3):
-            row_scenarios = SCENARIOS[row_start:row_start + 3]
+        for row_start in range(0, len(_all_cards), 3):
+            row_cards = _all_cards[row_start:row_start + 3]
             cols = st.columns(3)
-            for ci, s in enumerate(row_scenarios):
+            for ci, s in enumerate(row_cards):
                 with cols[ci]:
-                    if st.button(
-                        f"**{s['name']}**\n\n{s['description']}",
-                        key=f"scenario_card_{s['id']}",
-                        use_container_width=True,
-                    ):
-                        idx = s["id"] - 1
-                        st.session_state["_prev_scenario"] = idx
-                        st.session_state.pop("last_run", None)
-                        for key in GUARDRAIL_BLOCKS:
-                            st.session_state[f"guard_{key}"] = False
-                        st.session_state["guard_refund"] = False
-                        st.rerun()
+                    if s["id"] == "custom":
+                        if st.button(
+                            f"**{s['name']}**\n\n{s['description']}",
+                            key="scenario_card_custom",
+                            use_container_width=True,
+                        ):
+                            st.session_state["_prev_scenario"] = "custom"
+                            st.session_state["_custom_writing"] = True
+                            st.session_state.pop("last_run", None)
+                            for key in GUARDRAIL_BLOCKS:
+                                st.session_state[f"guard_{key}"] = False
+                            st.session_state["guard_refund"] = False
+                            st.rerun()
+                    else:
+                        if st.button(
+                            f"**{s['name']}**\n\n{s['description']}",
+                            key=f"scenario_card_{s['id']}",
+                            use_container_width=True,
+                        ):
+                            idx = s["id"] - 1
+                            st.session_state["_prev_scenario"] = idx
+                            st.session_state.pop("last_run", None)
+                            _s_rec_soft = s.get("recommended_guardrails", [])
+                            _s_rec_hard = s.get("recommended_hard_guardrail", False)
+                            for key in GUARDRAIL_BLOCKS:
+                                st.session_state[f"guard_{key}"] = key in _s_rec_soft
+                            st.session_state["guard_refund"] = _s_rec_hard
+                            st.session_state["_auto_set_scenario"] = s.get("id")
+                            st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-
-        # ── Custom message ────────────────────────────────────────────────
-        st.markdown("---")
-        st.markdown("#### Or write your own")
-        st.caption("Type any customer message and send it to the agent.")
-        custom_freeform = st.text_area("Customer message:", value="", height=100,
-                                       key="freeform_message", label_visibility="collapsed",
-                                       placeholder="e.g. Hi, I'd like to return my order...")
-        if custom_freeform.strip():
-            if st.button("Use this message \u2192", type="primary"):
-                st.session_state["_prev_scenario"] = "custom"
-                st.session_state["_custom_message"] = custom_freeform.strip()
-                st.session_state.pop("last_run", None)
-                for key in GUARDRAIL_BLOCKS:
-                    st.session_state[f"guard_{key}"] = False
-                st.session_state["guard_refund"] = False
-                st.rerun()
 
     else:
         # ── Resolve scenario + message ───────────────────────────────────
-        if selected_idx == "custom":
+        if selected_idx == "custom" and st.session_state.get("_custom_writing"):
+            # Show text input for custom message
+            st.markdown(f'<div style="font-size:0.8em; color:{C_MID}; margin-bottom:4px;">Write your own</div>',
+                        unsafe_allow_html=True)
+            custom_freeform = st.text_area("Customer message:", value="", height=100,
+                                           key="freeform_message", label_visibility="collapsed",
+                                           placeholder="e.g. Hi, I'd like to return my order...")
+            if custom_freeform.strip():
+                if st.button("Send to Agent", type="primary", use_container_width=True):
+                    st.session_state["_custom_message"] = custom_freeform.strip()
+                    st.session_state["_custom_writing"] = False
+                    st.rerun()
+            # Change scenario button
+            st.markdown("---")
+            if st.button("Change scenario", key="change_custom", use_container_width=True):
+                st.session_state["_prev_scenario"] = None
+                st.session_state.pop("_custom_writing", None)
+                st.rerun()
+
+        elif selected_idx == "custom":
             scenario = {"name": "Custom", "description": "Your own message",
                         "customer_message": st.session_state.get("_custom_message", ""),
                         "what_to_watch": "Watch how the agent handles your message.",
                         "guardrail_note": "", "recommended_guardrails": [],
-                        "recommended_refund_guardrail": False,
+                        "recommended_hard_guardrail": False,
                         "expected_behaviour": [], "failure_modes": [],
                         "silent_failure_note": ""}
             message = scenario["customer_message"]
@@ -844,7 +880,7 @@ with tab_run:
             run_data = st.session_state["last_run"]
             result = run_data["result"]
             ag = run_data["active_guardrails"]
-            rg = run_data["refund_guardrail"]
+            rg = run_data.get("hard_guardrail", run_data.get("refund_guardrail", False))
 
             # Scenario label
             st.markdown(
@@ -881,48 +917,6 @@ with tab_run:
                 render_prompt_panel_readonly(ag, rg)
 
             # ── Guardrail comparison prompt ──────────────────────────────
-            any_guardrails_active = bool(ag) or rg
-            if not any_guardrails_active:
-                # Ran WITHOUT guardrails
-                st.markdown(
-                    f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
-                    f'border-radius:8px; padding:16px 20px; margin:16px 0;">'
-                    f'<div style="color:{C_BLACK}; font-size:0.95em; margin-bottom:10px;">'
-                    f'This ran <strong>without guardrails</strong>. '
-                    f'See what changes when the agent has rules to follow.</div></div>',
-                    unsafe_allow_html=True)
-                if st.button("Re-run WITH all guardrails", use_container_width=True, type="primary",
-                             key="rerun_with_guardrails"):
-                    for key in GUARDRAIL_BLOCKS:
-                        st.session_state[f"guard_{key}"] = True
-                    st.session_state["guard_refund"] = True
-                    st.session_state.pop("last_run", None)
-                    st.rerun()
-            else:
-                # Ran WITH guardrails — list them
-                active_names = []
-                for k in ag:
-                    block = GUARDRAIL_BLOCKS.get(k)
-                    if block:
-                        active_names.append(block["label"])
-                if rg:
-                    active_names.append(_hard_guard_label)
-                guard_list = ", ".join(active_names) if active_names else "guardrails"
-                st.markdown(
-                    f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
-                    f'border-radius:8px; padding:16px 20px; margin:16px 0;">'
-                    f'<div style="color:{C_BLACK}; font-size:0.95em; margin-bottom:10px;">'
-                    f'This ran <strong>with guardrails</strong>: {_html.escape(guard_list)}. '
-                    f'See what happens without them.</div></div>',
-                    unsafe_allow_html=True)
-                if st.button("Re-run WITHOUT guardrails", use_container_width=True, type="primary",
-                             key="rerun_without_guardrails"):
-                    for key in GUARDRAIL_BLOCKS:
-                        st.session_state[f"guard_{key}"] = False
-                    st.session_state["guard_refund"] = False
-                    st.session_state.pop("last_run", None)
-                    st.rerun()
-
             # ── Teaching Notes (collapsed) ───────────────────────────────
             _has_teaching = (scenario.get("what_to_watch") or scenario.get("guardrail_note")
                              or scenario.get("silent_failure_note") or scenario.get("failure_modes")
@@ -968,6 +962,49 @@ with tab_run:
                             f'{scenario["proves"]}</div>',
                             unsafe_allow_html=True)
 
+            # ── Re-run CTA ────────────────────────────────────────────────
+            any_guardrails_active = bool(ag) or rg
+            if not any_guardrails_active:
+                # Ran WITHOUT guardrails
+                st.markdown(
+                    f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
+                    f'border-radius:8px; padding:16px 20px; margin:16px 0;">'
+                    f'<div style="color:{C_BLACK}; font-size:0.95em; margin-bottom:10px;">'
+                    f'This ran <strong>without guardrails</strong>. '
+                    f'See what changes when the agent has rules to follow.</div></div>',
+                    unsafe_allow_html=True)
+                if st.button("Re-run WITH all guardrails", use_container_width=True, type="primary",
+                             key="rerun_with_guardrails"):
+                    for key in GUARDRAIL_BLOCKS:
+                        st.session_state[f"guard_{key}"] = True
+                    st.session_state["guard_refund"] = True
+                    st.session_state.pop("last_run", None)
+                    st.rerun()
+            else:
+                # Ran WITH guardrails — list them
+                active_names = []
+                for k in ag:
+                    block = GUARDRAIL_BLOCKS.get(k)
+                    if block:
+                        active_names.append(block["label"])
+                if rg:
+                    active_names.append(_hard_guard_label)
+                guard_list = ", ".join(active_names) if active_names else "guardrails"
+                st.markdown(
+                    f'<div style="background:{C_CREAM}; border:1px solid {C_BORDER}; '
+                    f'border-radius:8px; padding:16px 20px; margin:16px 0;">'
+                    f'<div style="color:{C_BLACK}; font-size:0.95em; margin-bottom:10px;">'
+                    f'This ran <strong>with guardrails</strong>: {_html.escape(guard_list)}. '
+                    f'See what happens without them.</div></div>',
+                    unsafe_allow_html=True)
+                if st.button("Re-run WITHOUT guardrails", use_container_width=True, type="primary",
+                             key="rerun_without_guardrails"):
+                    for key in GUARDRAIL_BLOCKS:
+                        st.session_state[f"guard_{key}"] = False
+                    st.session_state["guard_refund"] = False
+                    st.session_state.pop("last_run", None)
+                    st.rerun()
+
             # Action buttons
             st.markdown("---")
             if st.button("Change scenario", key="change_scenario_results",
@@ -991,6 +1028,47 @@ with tab_run:
             # Send button
             run_clicked = st.button("Send to Agent", use_container_width=True, type="primary")
 
+            # ── Guardrail recommendation from scenario ─────────────────
+            _rec_soft = scenario.get("recommended_guardrails", [])
+            _rec_hard = scenario.get("recommended_hard_guardrail", False)
+            _rec_note = scenario.get("guardrail_note", "")
+
+            # Auto-set toggles to match recommendation (only on scenario change)
+            if st.session_state.get("_auto_set_scenario") != scenario.get("id"):
+                for key in GUARDRAIL_BLOCKS:
+                    st.session_state[f"guard_{key}"] = key in _rec_soft
+                st.session_state["guard_refund"] = _rec_hard
+                st.session_state["_auto_set_scenario"] = scenario.get("id")
+                st.rerun()
+
+            # Show recommendation hint
+            _rec_names = []
+            for k in _rec_soft:
+                block = GUARDRAIL_BLOCKS.get(k)
+                if block:
+                    _rec_names.append(block["label"])
+            if _rec_hard:
+                _rec_names.append(_hard_guard_label)
+
+            if _rec_names:
+                _pills = " · ".join(f"✅ {n}" for n in _rec_names)
+                st.markdown(
+                    f'<div style="background:{C_CREAM}; border-left:3px solid {C_YELLOW}; '
+                    f'padding:10px 14px; margin:8px 0; border-radius:0 6px 6px 0; '
+                    f'font-size:0.85em; color:{C_BODY};">'
+                    f'{_icon("shield", 14, C_BODY)} <strong>Recommended guardrails:</strong> {_pills}'
+                    f'<br><span style="opacity:0.65; font-size:0.9em;">Auto-set below — change them to see what happens.</span>'
+                    f'{"<br><span style=opacity:0.7>" + _rec_note + "</span>" if _rec_note else ""}'
+                    f'</div>',
+                    unsafe_allow_html=True)
+            elif _rec_note:
+                st.markdown(
+                    f'<div style="background:{C_CREAM}; border-left:3px solid {C_YELLOW}; '
+                    f'padding:10px 14px; margin:8px 0; border-radius:0 6px 6px 0; '
+                    f'font-size:0.85em; color:{C_BODY};">'
+                    f'{_icon("shield", 14, C_BODY)} {_rec_note}</div>',
+                    unsafe_allow_html=True)
+
             # Configure guardrails expander (collapsed)
             with st.expander("Configure guardrails", expanded=False):
                 guard_cols = st.columns(len(GUARDRAIL_BLOCKS) + 1)
@@ -999,7 +1077,7 @@ with tab_run:
                     with guard_cols[i]:
                         guardrail_states[key] = st.toggle(block["label"], key=f"guard_{key}")
                 with guard_cols[-1]:
-                    refund_guardrail = st.toggle(_hard_guard_label, key="guard_refund")
+                    hard_guardrail = st.toggle(_hard_guard_label, key="guard_refund")
 
                 # Soft/hard label row
                 soft_label = f'{_icon("shield", 12, C_BODY)} Soft (prompt)'
@@ -1012,9 +1090,9 @@ with tab_run:
 
             active_guardrails = [k for k, v in guardrail_states.items() if v]
 
-            # Advanced options expander (collapsed)
-            with st.expander("Advanced options", expanded=False):
-                st.caption("Simulate infrastructure failures. What happens when the agent's tools break?")
+            # Failure injection expander (collapsed)
+            with st.expander("Inject failures", expanded=False):
+                st.caption("Break the agent's tools and watch how it responds.")
                 fail_options = ["Off", "Service unavailable", "Timeout", "Server error (500)"]
                 fail_mode_map = {"Off": None, "Service unavailable": "service_unavailable",
                                  "Timeout": "timeout", "Server error (500)": "server_error"}
@@ -1049,7 +1127,7 @@ with tab_run:
                 try:
                     for step in run_agent_streaming(
                             message, active_guardrails=active_guardrails,
-                            refund_guardrail=refund_guardrail,
+                            hard_guardrail=hard_guardrail,
                             failure_config=failure_config or None,
                             tools_registry=_domain_pack.tools,
                             prompt_builder=_domain_pack.build_system_prompt,
@@ -1114,7 +1192,7 @@ with tab_run:
                             "iterations": final_result["iterations"],
                         },
                         "active_guardrails": active_guardrails,
-                        "refund_guardrail": refund_guardrail,
+                        "hard_guardrail": hard_guardrail,
                         "failure_config": failure_config,
                     }
 

@@ -4,7 +4,7 @@
   "scenario_name": "Simple Refund",
   "message": "Hi, I'd like to return my Willow Garden Trowel Set. Order number is ORD-001. I haven't opened it \u2014 just changed my mind. Can I get a refund please?",
   "active_guardrails": [],
-  "refund_guardrail": true,
+  "hard_guardrail": true,
   "failure_config": {},
   "result": {
     "response": "Hi Sarah,\n\nGreat news! Your refund has been approved and processed. \u2713\n\n**Refund Details:**\n- Order: ORD-001\n- Item: Willow Garden Trowel Set\n- Amount: \u00a318.99\n- Expected in your account: 5-7 working days\n\nI've also sent you a confirmation email with instructions for returning the unopened item. Once we receive it back, your refund will be fully confirmed.\n\nIf you need anything else or have questions about the return process, just let me know. Thanks for understanding, and sorry it didn't work out!",

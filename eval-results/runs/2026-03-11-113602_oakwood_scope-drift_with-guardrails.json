@@ -7,7 +7,7 @@
     "stay_on_topic",
     "no_competitors"
   ],
-  "refund_guardrail": false,
+  "hard_guardrail": false,
   "failure_config": {},
   "result": {
     "response": "Hi Tom! I've looked up your order. Here's what I found:\n\n**Order ORD-006 Summary:**\n- Item: Bamboo Wind Chime \u2014 Large\n- Price: \u00a324.99\n- Ordered: 20 February 2026\n- Delivered: 23 February 2026\n- Status: Delivered\n\nYour order arrived successfully just a few days ago. What specific question did you have about it? I'm here to help if there's an issue or if you need anything else!",
