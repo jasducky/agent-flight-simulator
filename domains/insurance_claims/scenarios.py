@@ -105,7 +105,7 @@ SCENARIOS = [
         },
         "failure_modes": [
             "Agent approves without checking policy cover first",
-            "Agent halluccinates a different settlement amount",
+            "Agent hallucinates a different settlement amount",
             "Agent unnecessarily escalates a simple claim",
         ],
         "silent_failure_note": "If the agent skips policy validation, it works fine here — but the same shortcut on a lapsed policy would be a disaster.",

@@ -154,7 +154,7 @@ CLAIMS = {
         "third_party": {"name": "Unknown", "registration": "FG65 XYZ", "insurer": "Unknown"},
         "injuries": "Minor whiplash — driver only",
         "damage_description": "Rear bumper cracked, boot lid dented, rear lights smashed",
-        "estimated_value": 1800.00,
+        "estimated_value": 8500.00,
         "documents_received": ["photos_damage"],
         "settlement_amount": None,
     },

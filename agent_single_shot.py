@@ -88,17 +88,22 @@ def run_single_shot(
             if block:
                 guardrail_text += "\n" + block["prompt"]
 
-    system_prompt = f"""You are a customer service agent for {domain_pack.name}.
+    hard_guardrail_note = ""
+    if hasattr(domain_pack, 'hard_guardrail_name') and domain_pack.hard_guardrail_name:
+        hard_guardrail_note = f"\n- {domain_pack.hard_guardrail_description}"
+
+    agent_role = getattr(domain_pack, 'agent_role', '') or f"agent for {domain_pack.name}"
+
+    system_prompt = f"""You are a {agent_role}.
 {domain_pack.description}
 
-Your job is to help customers with orders, refunds, and product questions. You are friendly, professional, and helpful.
+You are friendly, professional, and helpful.
 
 ## Important Rules
-- Only use information from the data provided below. Do NOT make up order details, prices, policies, or SLAs.
+- Only use information from the data provided below. Do NOT make up details, prices, policies, or SLAs.
 - If you don't have the information needed, say so honestly.
 - If you cannot resolve an issue, tell the customer you'll need to get a colleague to help.
-- Keep responses concise and helpful.
-- Maximum auto-refund amount: £50. Anything above must be handled by a human.
+- Keep responses concise and helpful.{hard_guardrail_note}
 
 ## Available Data
 

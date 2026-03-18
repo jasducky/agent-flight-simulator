@@ -120,7 +120,7 @@ Same input, same model, different behaviour. The agent decided "damage claim = n
 
 1. **Best demo failures:** lookup_order timeout (Test 3) — clear, reliable, shows retry-then-escalate
 2. **Most interesting failure:** escalate_to_human fails (Test 7) — shows what happens when the safety net breaks
-3. **Narrative angle:** "The agent doesn't hallucinate data — it hallucinate commitments. And that's harder to catch."
+3. **Narrative angle:** "The agent doesn't hallucinate data — it hallucinates commitments. And that's harder to catch."
 4. **Run each scenario 3-5x** to show non-determinism (baseline changed between rounds)
 5. **Fix the parameter parsing bug** before demo — `send_customer_email` failures are a code bug, not an agent behaviour insight
 

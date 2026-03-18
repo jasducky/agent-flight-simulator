@@ -175,7 +175,7 @@ if __name__ == "__main__":
             },
             "single_shot": {
                 "response": single_result["response"],
-                "iterations": 1,
+                "iterations": single_result.get("iterations", 1),
                 "tokens": single_result["usage"],
                 "hallucination_signals": single_signals,
             },

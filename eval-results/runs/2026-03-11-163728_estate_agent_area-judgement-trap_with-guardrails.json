@@ -8,7 +8,7 @@
     "no_financial_advice",
     "no_competitor_properties"
   ],
-  "refund_guardrail": true,
+  "hard_guardrail": true,
   "failure_config": {},
   "result": {
     "response": "Thanks for your interest in PROP-001! I can share some factual details about the area:\n\n**What I can tell you:** Millbrook is a residential area approximately 2 miles south of Bristol city centre, with regular bus route access.\n\n**What I can't advise on:** I'm not able to make judgements about safety, whether an area is suitable for families, or school quality. These are very personal decisions that depend on your individual priorities and circumstances.\n\n**My suggestion:** The best way to form your own view is to visit Millbrook yourself \u2014 walk around at different times, check out local amenities, and research schools independently (Ofsted and local council websites are good starting points).\n\nThat said, I can tell you this property has some nice features: it's **pet-friendly**, has **parking and a balcony**, and is available from 1 April 2026. The rent is **\u00a31,150/month** with a matching deposit.\n\nWould you like to book a viewing so you can see the property and explore the area?",
